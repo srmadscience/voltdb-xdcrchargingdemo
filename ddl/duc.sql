@@ -1,0 +1,1 @@
+alter task UpdateClustersTask disable;
