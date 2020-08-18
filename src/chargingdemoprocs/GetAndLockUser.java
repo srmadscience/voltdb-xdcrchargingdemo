@@ -32,10 +32,7 @@ public class GetAndLockUser extends VoltProcedure {
 
   // @formatter:off
 
-    public static final SQLStmt getUser = new SQLStmt("SELECT userid ,user_json_object " + 
-        ",user_last_seen,user_softlock_sessionid,user_softlock_expiry, now the_current_timestamp "
-        + "FROM user_table "
-        + "WHERE userid = ?;");
+    public static final SQLStmt getUser = new SQLStmt("SELECT * FROM user_table WHERE userid = ?;");
     
     public static final SQLStmt getUsage = new SQLStmt("SELECT * FROM user_usage_table WHERE userid = ? ORDER BY productid, clusterid;");
 

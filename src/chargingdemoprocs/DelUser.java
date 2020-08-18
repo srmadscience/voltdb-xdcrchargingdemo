@@ -33,12 +33,6 @@ public class DelUser extends VoltProcedure {
 
 	public static final SQLStmt delUser = new SQLStmt("DELETE FROM user_table WHERE userid = ?;");
 
-	public static final SQLStmt delUserClusterBalance = new SQLStmt(
-			"DELETE FROM user_cluster_balances WHERE userid = ?;");
-
-	public static final SQLStmt delUserCluster = new SQLStmt(
-			"DELETE FROM user_clusters WHERE userid = ?;");
-
 	public static final SQLStmt delUsage = new SQLStmt("DELETE FROM user_usage_table WHERE userid = ?;");
 
 	public static final SQLStmt delTxns = new SQLStmt("DELETE FROM user_recent_transactions WHERE userid = ?;");
@@ -54,9 +48,8 @@ public class DelUser extends VoltProcedure {
 	 */
 	public VoltTable[] run(long userId) throws VoltAbortException {
 
+		voltQueueSQL(delUser, userId);
 		voltQueueSQL(delUsage, userId);
-		voltQueueSQL(delUserClusterBalance, userId);
-		voltQueueSQL(delUserCluster, userId);
 		voltQueueSQL(delTxns, userId);
 
 		return voltExecuteSQL(true);

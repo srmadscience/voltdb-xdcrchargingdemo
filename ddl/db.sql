@@ -5,7 +5,8 @@ file -inlinebatch END_OF_BATCH
 
 CREATE TABLE cluster_table
 (cluster_id tinyint not null primary key
-,clustername varchar(50) not null);
+,cluster_name varchar(50) not null
+,watched_by_cluster_id tinyint not null );
 
 
 CREATE table product_table
@@ -20,7 +21,10 @@ CREATE table user_table
 ,user_json_object varchar(8000)
 ,user_last_seen TIMESTAMP DEFAULT NOW
 ,user_softlock_sessionid bigint 
-,user_softlock_expiry TIMESTAMP);
+,user_softlock_expiry TIMESTAMP
+,user_owning_cluster TINYINT NOT NULL
+,user_validated_balance BIGINT DEFAULT 0
+,user_validated_balance_timestamp TIMESTAMP  DEFAULT NOW);
 
 create index ut_del on user_table(user_last_seen);
 
@@ -29,40 +33,6 @@ PARTITION TABLE user_table ON COLUMN userid;
 DR table user_table;
 
 
-CREATE table user_clusters
-(userid bigint not null
-,clusterid tinyint NOT NULL
-,validated_balance bigint not null
-,validated_balance_timestamp TIMESTAMP NOT NULL
-,primary key (userid,clusterid));
-
-PARTITION TABLE user_clusters ON COLUMN userid;
-
-
-CREATE INDEX uc_ix1 ON 
-user_clusters(validated_balance_timestamp, userid);
-
-DR table user_clusters;
-
-
-
-CREATE table user_cluster_balances
-(userid bigint not null
-,clusterid tinyint NOT NULL
-,user_balance bigint not null
-,balance_timestamp TIMESTAMP NOT NULL
-,primary key (userid,clusterid,balance_timestamp));
-
-PARTITION TABLE user_cluster_balances ON COLUMN userid;
-
-DR table user_cluster_balances;
-
-CREATE VIEW max_user_cluster_balances AS
-SELECT userid, clusterid, max(balance_timestamp) balance_timestamp
-FROM user_cluster_balances
-GROUP BY userid, clusterid;
-
-create index mucb_idx1 on max_user_cluster_balances(clusterid, balance_timestamp, userid);
 
 create table user_recent_transactions
  MIGRATE TO TARGET user_transactions
@@ -178,27 +148,8 @@ DROP TASK PurgeWrangler IF EXISTS;
 
 CREATE TASK PurgeWrangler  FROM CLASS chargingdemotasks.PurgeWrangler WITH (10,30000) ON ERROR LOG RUN ON PARTITIONS DISABLE;
 
-CREATE PROCEDURE DIRECTED
-   FROM CLASS chargingdemoprocs.CreateUserClusterBalances;  
-   
-CREATE PROCEDURE DIRECTED
-   FROM CLASS chargingdemoprocs.UpdateUserCluster;  
-   
-CREATE TASK CreateClusterBalancesTask
-ON SCHEDULE DELAY 1 SECONDS
-PROCEDURE CreateUserClusterBalances
-WITH (2)
- ON ERROR LOG
-RUN ON PARTITIONS
-DISABLE;
- 
-CREATE TASK UpdateClustersTask
-ON SCHEDULE DELAY 1 SECONDS
-PROCEDURE UpdateUserCluster
- ON ERROR LOG
-RUN ON PARTITIONS
-DISABLE;
- 
+
+
 
 
 END_OF_BATCH

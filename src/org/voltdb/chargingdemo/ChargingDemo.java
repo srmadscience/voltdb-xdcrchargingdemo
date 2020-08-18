@@ -51,6 +51,8 @@ public class ChargingDemo {
 	public static final String[] CLUSTER_NAMES = { "jersey","badger","rosal" };
 
 	public static final int[] CLUSTER_IDS = {4,5,6 };
+	
+	public static final int[] WATCHED_BY_CLUSTER_IDS = {5,6,4 };
 
 	/**
 	 * @param args
@@ -138,10 +140,10 @@ public class ChargingDemo {
 				
 				for (int i = 0; i < CLUSTER_NAMES.length; i++) {
 					ClientResponse cr = mainClient.callProcedure("@AdHoc", 
-							"SELECT * FROM cluster_table where cluster_id = " + i + ";");
+							"SELECT * FROM cluster_table where cluster_id = " + CLUSTER_IDS[i] + ";");
 
 					if (!cr.getResults()[0].advanceRow()) {
-						mainClient.callProcedure("cluster_table.insert", CLUSTER_IDS[i], CLUSTER_NAMES[i]);
+						mainClient.callProcedure("cluster_table.insert", CLUSTER_IDS[i],CLUSTER_NAMES[i], WATCHED_BY_CLUSTER_IDS[i] );
 					}
 				}
 				

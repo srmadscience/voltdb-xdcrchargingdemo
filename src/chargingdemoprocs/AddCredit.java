@@ -31,8 +31,9 @@ public class AddCredit extends VoltProcedure {
 
 	// @formatter:off
 
-	public static final SQLStmt getUser = new SQLStmt("SELECT userid FROM user_table WHERE userid = ?;");
-
+	public static final SQLStmt getUser = new SQLStmt("SELECT userid, user_validated_balance, user_validated_balance_timestamp "
+			+ "FROM user_table WHERE userid = ?;");
+	
 	public static final SQLStmt getTxn = new SQLStmt("SELECT txn_time FROM user_recent_transactions "
 			+ "WHERE userid = ? " + "AND user_txn_id = ?" + "AND clusterid = ?;");
 
@@ -43,19 +44,18 @@ public class AddCredit extends VoltProcedure {
 			"INSERT INTO user_financial_events (userid, amount, purpose, clusterid) VALUES (?,?,?,?);");
 
 	public static final SQLStmt getSpendingHistory = new SQLStmt(
-			"select ut.userid, uc.validated_balance, sum(ut.amount) ut_amount " + "from user_recent_transactions ut  "
-					+ "   , user_clusters uc " + "where ut.userid = ?  " 
-					+ "and   ut.userid = uc.userid " + "and   ut.clusterid = uc.clusterid "
-					+ "and ut.txn_time > uc.validated_balance_timestamp "
-					+ "group by ut.userid, uc.validated_balance "
-					+ "order by  ut.userid, uc.validated_balance; ");
+			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount " 
+					+ "from user_recent_transactions ut  "
+					+ "   , user_table uc " 
+					+ "where ut.userid = ?  " 
+					+ "and   ut.userid = uc.userid " 
+					+ "and ut.txn_time > uc.user_validated_balance_timestamp "
+					+ "group by ut.userid, uc.user_validated_balance "
+					+ "order by  ut.userid, uc.user_validated_balance; ");
 
 	public static final SQLStmt getAllocatedCredit = new SQLStmt(
 			"select sum(uut.allocated_units * p.unit_cost )  allocated " + "from user_usage_table uut "
 					+ "   , product_table p " + "where uut.userid = ? " + "and   p.productid = uut.productid;");
-
-	public static final SQLStmt getValidatedBalance = new SQLStmt(
-			"select uc.validated_balance from  user_clusters uc " + "where uc.userid  = ? AND uc.clusterid = ?;");
 
 	// @formatter:on
 
@@ -76,19 +76,19 @@ public class AddCredit extends VoltProcedure {
 		voltQueueSQL(getUser, userId);
 		voltQueueSQL(getTxn, userId, txnId, this.getClusterId());
 
-		VoltTable[] results = voltExecuteSQL();
+		VoltTable[] userAndTxn = voltExecuteSQL();
 
 		// Sanity Check: Is this a real user?
-		if (!results[0].advanceRow()) {
+		if (!userAndTxn[0].advanceRow()) {
 			throw new VoltAbortException("User " + userId + " does not exist");
 		}
 
 		// Sanity Check: Has this transaction already happened?
-		if (results[1].advanceRow()) {
+		if (userAndTxn[1].advanceRow()) {
 
 			this.setAppStatusCode(ReferenceData.TXN_ALREADY_HAPPENED);
 			this.setAppStatusString(
-					"Event already happened at " + results[1].getTimestampAsTimestamp("txn_time").toString());
+					"Event already happened at " + userAndTxn[1].getTimestampAsTimestamp("txn_time").toString());
 
 		} else {
 
@@ -102,8 +102,9 @@ public class AddCredit extends VoltProcedure {
 			voltQueueSQL(addCredit, userId, extraCredit, extraCredit + " added", this.getClusterId());
 			voltQueueSQL(addTxn, userId, txnId, extraCredit, this.getClusterId());
 
-			// Get history so we know current balance
-			voltQueueSQL(getValidatedBalance, userId, this.getClusterId());
+
+			// get user and validated balance
+			voltQueueSQL(getUser, userId);
 
 			// Get history so we know current balance
 			voltQueueSQL(getSpendingHistory, userId);

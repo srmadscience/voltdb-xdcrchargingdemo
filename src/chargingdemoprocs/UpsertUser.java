@@ -37,19 +37,12 @@ public class UpsertUser extends VoltProcedure {
 	public static final SQLStmt getTxn = new SQLStmt("SELECT txn_time FROM user_recent_transactions "
 			+ "WHERE userid = ? AND user_txn_id = ? AND clusterid = ?;");
 
-	public static final SQLStmt getClusters = new SQLStmt("SELECT * FROM cluster_table ORDER BY cluster_id;");
-
 	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
 			+ "(userid, user_txn_id, txn_time, amount,clusterid) VALUES (?,?,NOW,?,?);");
 
 	public static final SQLStmt upsertUser = new SQLStmt(
-			"UPSERT INTO user_table (userid, user_json_object,user_last_seen) VALUES (?,?,?);");
-
-	public static final SQLStmt insertUserCluster = new SQLStmt("INSERT INTO user_clusters "
-			+ "(userid, clusterid,validated_balance ,validated_balance_timestamp) VALUES (?,?,?, DATEADD( MINUTE, ?, NOW));");
-
-	public static final SQLStmt insertUserClusterBalance = new SQLStmt("INSERT INTO user_cluster_balances "
-			+ "(userid, clusterid,user_balance ,balance_timestamp) VALUES (?,?,?, DATEADD( MINUTE, ?, NOW));");
+			"UPSERT INTO user_table (userid, user_json_object,user_last_seen,user_owning_cluster,user_validated_balance,user_validated_balance_timestamp) "
+			+ "VALUES (?,?,?,?,?, DATEADD( SECOND, ?, NOW));");
 
 	public static final SQLStmt addCredit = new SQLStmt(
 			"INSERT INTO user_financial_events (userid   ,amount, purpose, clusterid)    VALUES (?,?,?,?);");
@@ -76,7 +69,6 @@ public class UpsertUser extends VoltProcedure {
 
 		voltQueueSQL(getUser, userId);
 		voltQueueSQL(getTxn, userId, txnId, this.getClusterId());
-		voltQueueSQL(getClusters);
 
 		VoltTable[] results = voltExecuteSQL();
 
@@ -99,18 +91,7 @@ public class UpsertUser extends VoltProcedure {
 				currentBalance = addBalance;
 
 				final String status = "Created user " + userId + " with opening credit of " + addBalance;
-				voltQueueSQL(upsertUser, userId, json, lastSeen);
-
-				while (results[2].advanceRow()) {
-
-					byte clusterId = (byte) results[2].getLong("cluster_id");
-
-					// Create a balance of zero 1 minute in the past
-					voltQueueSQL(insertUserCluster, userId, clusterId, 0, -1 );					
-					voltQueueSQL(insertUserClusterBalance, userId, clusterId, 0, -1);
-
-				}
-
+				voltQueueSQL(upsertUser, userId, json, lastSeen, this.getClusterId(), 0, -1);
 				voltQueueSQL(addCredit, userId, addBalance, status, this.getClusterId());
 				this.setAppStatusCode(ReferenceData.STATUS_OK);
 				this.setAppStatusString(status);
@@ -124,7 +105,7 @@ public class UpsertUser extends VoltProcedure {
 				final String status = "Updated user " + userId + " - added credit of " + addBalance + "; balance now "
 						+ currentBalance;
 
-				voltQueueSQL(upsertUser, userId, json, lastSeen);
+				voltQueueSQL(upsertUser, userId, json, lastSeen, this.getClusterId(),  -1);
 				voltQueueSQL(addCredit, userId, addBalance, status, this.getClusterId());
 
 				this.setAppStatusCode(ReferenceData.STATUS_OK);

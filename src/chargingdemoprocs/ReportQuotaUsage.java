@@ -28,44 +28,28 @@ import org.voltdb.VoltProcedure;
 import org.voltdb.VoltTable;
 import org.voltdb.VoltType;
 
-public class ReportQuotaUsage extends VoltProcedure {
+public class ReportQuotaUsage extends AbstractChargingProcedure {
 
 	// @formatter:off
 
-	public static final SQLStmt getUser = new SQLStmt("SELECT userid FROM user_table WHERE userid = ?;");
+	public static final SQLStmt getUser = new SQLStmt("SELECT userid, user_validated_balance, user_validated_balance_timestamp, user_owning_cluster "
+			+ "FROM user_table WHERE userid = ?;");
 
 	public static final SQLStmt getTxn = new SQLStmt("SELECT txn_time FROM user_recent_transactions "
 			+ "WHERE userid = ? AND user_txn_id = ? AND clusterid = ?;");
     
-    public static final SQLStmt migrateOldZeroTxns = new SQLStmt("MIGRATE FROM user_recent_transactions "
-    		+ "WHERE userid = ? AND txn_time < DATEADD(MINUTE,?,NOW) AND amount = 0 AND clusterid = ? AND NOT MIGRATING();");
-    
-	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
+  	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
 			+ "(userid, user_txn_id, txn_time, productid, amount, clusterid) " + "VALUES (?,?,NOW,?,?,?);");
 
-//    public static final SQLStmt getBalance = new SQLStmt("SELECT balance, CAST (? AS BIGINT) product_id,"
-//        + " CAST (? AS BIGINT) session_id, userid FROM user_balances WHERE userid = ?;");
-
-//    public static final SQLStmt getRemainingCredit
-//    = new SQLStmt("select v.userid, v.balance - sum(uut.allocated_units * p.unit_cost )  balance "
-//               + "from  user_balances v " 
-//               + ", user_usage_table uut "
-//               + ", product_table p "
-//               + "where v.userid = ? "
-//               + "and   v.userid = uut.userid "
-//               + "and   p.productid = uut.productid "
-//               + "group by v.userid, v.balance;");
-
-	public static final SQLStmt getValidatedBalance = new SQLStmt(
-			"select uc.validated_balance from  user_clusters uc " + "where uc.userid  = ? AND uc.clusterid = ?;");
-
 	public static final SQLStmt getSpendingHistory = new SQLStmt(
-			"select ut.userid, uc.validated_balance, sum(ut.amount) ut_amount " + "from user_recent_transactions ut  "
-					+ "   , user_clusters uc " + "where ut.userid = ?  " + "and   ut.clusterid = ? "
-					+ "and   ut.userid = uc.userid " + "and   ut.clusterid = uc.clusterid "
-					+ "and ut.txn_time > uc.validated_balance_timestamp "
-					+ "group by ut.userid, uc.validated_balance "
-					+ "order by ut.userid, uc.validated_balance; ");
+			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount, count(*) how_many " 
+					+ "from user_recent_transactions ut  "
+					+ "   , user_table uc " 
+					+ "where ut.userid = ?  " 
+					+ "and   ut.userid = uc.userid " 
+					+ "and ut.txn_time > uc.user_validated_balance_timestamp "
+					+ "group by ut.userid, uc.user_validated_balance "
+					+ "order by  ut.userid, uc.user_validated_balance; ");
 
 	public static final SQLStmt getAllocatedCredit = new SQLStmt(
 			"select sum(uut.allocated_units * p.unit_cost )  allocated " + "from user_usage_table uut "
@@ -95,6 +79,7 @@ public class ReportQuotaUsage extends VoltProcedure {
 		// long currentBalance = 0;
 		long unitCost = 0;
 		long sessionId = inputSessionId;
+		byte userClusterId = -1;
 
 		if (sessionId <= 0) {
 			sessionId = this.getUniqueId();
@@ -111,6 +96,8 @@ public class ReportQuotaUsage extends VoltProcedure {
 			throw new VoltAbortException("User " + userId + " does not exist");
 		}
 
+		userClusterId = (byte) results[0].getLong("user_owning_cluster");
+		
 		// Sanity Check: Does this product exist?
 		if (!results[1].advanceRow()) {
 			throw new VoltAbortException("Product " + productId + " does not exist");
@@ -144,16 +131,13 @@ public class ReportQuotaUsage extends VoltProcedure {
 		// Note that transaction is now 'official'
 		voltQueueSQL(addTxn, userId, txnId, productId, amountSpent, this.getClusterId());
 		
-		// get balance
-		voltQueueSQL(getValidatedBalance, userId, this.getClusterId());
-		
 		// Get history so we know current balance
-		voltQueueSQL(getSpendingHistory, userId, this.getClusterId());
+		voltQueueSQL(getSpendingHistory, userId);
 
 		// get allocated credit so we can see what we can spend...
 		voltQueueSQL(getAllocatedCredit, userId);
 		
-		voltQueueSQL(migrateOldZeroTxns, userId, -2, this.getClusterId());
+		voltQueueSQL(migrateOldTxns, userId, -2, this.getClusterId());
 		
 		
 
@@ -162,16 +146,15 @@ public class ReportQuotaUsage extends VoltProcedure {
 		
 
 		// Check the balance...
-		interimResults[2].advanceRow();
 
-		final long validatedBalance = interimResults[2].getLong("validated_balance");
+		final long validatedBalance = results[0].getLong("user_validated_balance");
 	
 	    long recentChanges = 0;
 		
-		if (interimResults[3].advanceRow()) {
-			recentChanges = interimResults[3].getLong("ut_amount");
+		if (interimResults[2].advanceRow()) {
+			recentChanges = interimResults[2].getLong("ut_amount");
 			
-			if (interimResults[3].wasNull()) {
+			if (interimResults[2].wasNull()) {
 				recentChanges=0;
 			}
 		}
@@ -179,19 +162,13 @@ public class ReportQuotaUsage extends VoltProcedure {
 		long currentlyAllocatedCredit = 0;
 
 		// If we have any reservations take their cost into account
-		if (interimResults[4].advanceRow()) {
-			currentlyAllocatedCredit = interimResults[4].getLong("allocated");
+		if (interimResults[3].advanceRow()) {
+			currentlyAllocatedCredit = interimResults[3].getLong("allocated");
 			
-			if (interimResults[4].wasNull()) {
+			if (interimResults[3].wasNull()) {
 				currentlyAllocatedCredit=0;
 			}
 			
-//			if (currentlyAllocatedCredit > 10000 || currentlyAllocatedCredit < 0) {
-//				for (int i = 0; i < interimResults.length; i++) {
-//					System.out.println(interimResults[i].toFormattedString());
-//				}
-//
-//			}
 		}
 
 		
@@ -233,16 +210,25 @@ public class ReportQuotaUsage extends VoltProcedure {
 
 		}
 
-		voltExecuteSQL(true);
+		voltExecuteSQL();
+		
+		int recordsMigrated = 0;
+		
+		
+		if (userClusterId == this.getClusterId()) {
+			recordsMigrated = cleanupTransactions(userId, MIGRATION_GRACE_MINUTES);
+		}
+		
 
 		VoltTable t = new VoltTable(new VoltTable.ColumnInfo("userid", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("productId", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("sessionId", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("clusterid", VoltType.BIGINT)
 				,new VoltTable.ColumnInfo("availableCredit", VoltType.BIGINT),
-				new VoltTable.ColumnInfo("allocated_units", VoltType.BIGINT));
+				new VoltTable.ColumnInfo("allocated_units", VoltType.BIGINT),
+				new VoltTable.ColumnInfo("recordsMigrated", VoltType.BIGINT));
 
-		t.addRow(userId, productId, sessionId, this.getClusterId(), availableCredit,unitsAllocated);
+		t.addRow(userId, productId, sessionId, this.getClusterId(), availableCredit,unitsAllocated,recordsMigrated);
 
 		VoltTable[] resultsAsArray = { t };
 
