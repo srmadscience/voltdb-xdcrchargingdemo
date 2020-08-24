@@ -28,73 +28,58 @@ import org.voltdb.VoltProcedure;
 import org.voltdb.VoltTable;
 import org.voltdb.types.TimestampType;
 
-public  class AbstractChargingProcedure extends VoltProcedure {
+public class AbstractChargingProcedure extends VoltProcedure {
 
-    // @formatter:off
+	// @formatter:off
 
 	public static final SQLStmt getMigratableSpendingHistory = new SQLStmt(
-			"select ut.userid, uc.user_validated_balance, uc.user_validated_balance_timestamp, max(ut.txn_time) txn_time, sum(ut.amount) ut_amount, count(*) how_many " 
-					+ "from user_recent_transactions ut  "
-					+ "   , user_table uc " 
-					+ "where ut.userid = ?  " 
-					+ "and   ut.userid = uc.userid " 
-					+ "and ut.txn_time > uc.user_validated_balance_timestamp "
+			"select ut.userid, uc.user_validated_balance, uc.user_validated_balance_timestamp, max(ut.txn_time) txn_time, sum(ut.amount) ut_amount, count(*) how_many "
+					+ "from user_recent_transactions ut  " + "   , user_table uc " + "where ut.userid = ?  "
+					+ "and   ut.userid = uc.userid " + "and ut.txn_time > uc.user_validated_balance_timestamp "
 					+ "and ut.txn_time <= DATEADD( MINUTE, ?, NOW) "
 					+ "group by ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp "
 					+ "order by  ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp; ");
 
-	
-	   public static final SQLStmt migrateOldTxns = new SQLStmt("MIGRATE FROM user_recent_transactions "
-	    		+ "WHERE userid = ? "
-	    		+ "AND txn_time >= ? "
-	    		+ "AND txn_time < ?  "
-	    		+ "AND NOT MIGRATING();");
-	    
-	   public static final SQLStmt updateUser = new SQLStmt("UPDATE user_table "
-	   		+ "SET user_validated_balance = ?"
-	   		+ "  , user_validated_balance_timestamp = ? "
-	    		+ "WHERE userid = ? ;");
-	    
-	   public int MIGRATION_GRACE_MINUTES = 3;
-   
-  
+	public static final SQLStmt migrateOldTxns = new SQLStmt("MIGRATE FROM user_recent_transactions "
+			+ "WHERE userid = ? " + "AND txn_time >= ? " + "AND txn_time < ?  " + "AND NOT MIGRATING();");
 
-    // @formatter:on
+	public static final SQLStmt updateUser = new SQLStmt("UPDATE user_table " + "SET user_validated_balance = ?"
+			+ "  , user_validated_balance_timestamp = ? " + "WHERE userid = ? ;");
 
-    
-    protected int cleanupTransactions(long userId, int minutesGracePeriod) {
-    	
-    	voltQueueSQL(getMigratableSpendingHistory, userId, -1 * minutesGracePeriod);
-    	VoltTable[] migrationCandidates = voltExecuteSQL();
+	public static final SQLStmt getCluster = new SQLStmt("SELECT * FROM cluster_table WHERE cluster_id = ?;");
 
-    	if (migrationCandidates[0].getRowCount() == 0) {
-    		return 0;
-    	}
+	public byte DEFAULT_CLUSTER_PURGE_MINUTES = 3;
 
-    	
-    	migrationCandidates[0].advanceRow();
-    	
-    	
-    	long validatedBalance = migrationCandidates[0].getLong("user_validated_balance");
-    	long delta = migrationCandidates[0].getLong("ut_amount");
-      	TimestampType validatedBalanceTime = migrationCandidates[0].getTimestampAsTimestamp("user_validated_balance_timestamp");
-      	TimestampType lastTxnTime = migrationCandidates[0].getTimestampAsTimestamp("txn_time");
-           	
-    	if (userId == 2) {
-    		System.out.println("bal = " + validatedBalance + "  delta = "  + delta + " " + lastTxnTime.toString());
-    	}
-    	
-    	voltQueueSQL(migrateOldTxns, userId, validatedBalanceTime , lastTxnTime);
-    	voltQueueSQL(updateUser,  (delta + validatedBalance), lastTxnTime, userId);
-    	voltExecuteSQL();
-    	
-    	return (int) migrationCandidates[0].getLong("how_many");
-    }
+	// @formatter:on
 
-    public VoltTable[] run() throws VoltAbortException {
+	protected int cleanupTransactions(long userId, int minutesGracePeriod) {
 
-        
-        return voltExecuteSQL(true);
+		voltQueueSQL(getMigratableSpendingHistory, userId, -1 * minutesGracePeriod);
+		VoltTable[] migrationCandidates = voltExecuteSQL();
 
-    }
+		if (migrationCandidates[0].getRowCount() == 0) {
+			return 0;
+		}
+
+		migrationCandidates[0].resetRowPosition();
+		migrationCandidates[0].advanceRow();
+
+		long validatedBalance = migrationCandidates[0].getLong("user_validated_balance");
+		long delta = migrationCandidates[0].getLong("ut_amount");
+		TimestampType validatedBalanceTime = migrationCandidates[0]
+				.getTimestampAsTimestamp("user_validated_balance_timestamp");
+		TimestampType lastTxnTime = migrationCandidates[0].getTimestampAsTimestamp("txn_time");
+
+		voltQueueSQL(migrateOldTxns, userId, validatedBalanceTime, lastTxnTime);
+		voltQueueSQL(updateUser, (delta + validatedBalance), lastTxnTime, userId);
+		voltExecuteSQL();
+
+		return (int) migrationCandidates[0].getLong("how_many");
+	}
+
+	public VoltTable[] run() throws VoltAbortException {
+
+		return voltExecuteSQL(true);
+
+	}
 }

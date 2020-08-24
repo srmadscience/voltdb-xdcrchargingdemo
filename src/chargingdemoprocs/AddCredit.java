@@ -38,10 +38,8 @@ public class AddCredit extends VoltProcedure {
 			+ "WHERE userid = ? " + "AND user_txn_id = ?" + "AND clusterid = ?;");
 
 	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
-			+ "(userid, user_txn_id, txn_time,amount,clusterid) VALUES (?,?,NOW,?,?);");
+			+ "(userid, user_txn_id, txn_time,amount,clusterid,purpose) VALUES (?,?,NOW,?,?,?);");
 
-	public static final SQLStmt addCredit = new SQLStmt(
-			"INSERT INTO user_financial_events (userid, amount, purpose, clusterid) VALUES (?,?,?,?);");
 
 	public static final SQLStmt getSpendingHistory = new SQLStmt(
 			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount " 
@@ -99,8 +97,7 @@ public class AddCredit extends VoltProcedure {
 
 			// Insert a row into the stream for each user's financial events.
 			// The view user_balances can then calculate actual credit
-			voltQueueSQL(addCredit, userId, extraCredit, extraCredit + " added", this.getClusterId());
-			voltQueueSQL(addTxn, userId, txnId, extraCredit, this.getClusterId());
+			voltQueueSQL(addTxn, userId, txnId, extraCredit, this.getClusterId(),"Add Credit");
 
 
 			// get user and validated balance

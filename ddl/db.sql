@@ -6,7 +6,11 @@ file -inlinebatch END_OF_BATCH
 CREATE TABLE cluster_table
 (cluster_id tinyint not null primary key
 ,cluster_name varchar(50) not null
-,watched_by_cluster_id tinyint not null );
+,watched_by_cluster_id tinyint not null 
+,cluster_purge_minutes tinyint default 3);
+
+DR TABLE cluster_table;
+
 
 
 CREATE table product_table
@@ -42,6 +46,7 @@ create table user_recent_transactions
 ,txn_time TIMESTAMP DEFAULT NOW  not null 
 ,productid bigint
 ,amount bigint 
+,purpose  varchar(128)
 ,primary key (userid, user_txn_id,clusterid));
 
 PARTITION TABLE user_recent_transactions ON COLUMN userid;
@@ -54,16 +59,12 @@ CREATE INDEX urt_del_idx3 ON user_recent_transactions(txn_time) WHERE NOT MIGRAT
 
 DR table user_recent_transactions;
 
+create view cluster_activity as 
+select clusterid, truncate(minute, txn_time) txn_time, count(*) how_many
+from user_recent_transactions
+group by clusterid, truncate(minute, txn_time) ;
 
 
-CREATE STREAM user_financial_events 
-partition on column userid
-export to target finevent
-(userid bigint not null 
-,amount bigint not null
-,clusterid tinyint not null
-,purpose varchar(80) not null
-);
 
 create table user_usage_table
  MIGRATE TO TARGET user_usage_table_stale_entries
@@ -76,6 +77,8 @@ create table user_usage_table
 ,primary key (userid, productid,sessionid,clusterid));
 
 CREATE INDEX uut_del_idx ON user_usage_table(lastdate,clusterid,userid, productid,sessionid);
+
+CREATE INDEX uut_del_idx2 ON user_usage_table(userid,lastdate);
 
 PARTITION TABLE user_usage_table ON COLUMN userid;
 
@@ -130,26 +133,13 @@ CREATE PROCEDURE
    PARTITION ON TABLE user_table COLUMN userid
    FROM CLASS chargingdemoprocs.AddCredit;  
 
-DROP TASK DeleteStaleAllocationsTask IF EXISTS;
-   
 DROP PROCEDURE DeleteStaleAllocations IF EXISTS;
   
 CREATE PROCEDURE DIRECTED
    FROM CLASS chargingdemoprocs.DeleteStaleAllocations;  
    
-CREATE TASK DeleteStaleAllocationsTask
-ON SCHEDULE DELAY 1 SECONDS
-PROCEDURE DeleteStaleAllocations ON ERROR LOG
-RUN ON PARTITIONS;
-
-DROP TASK DeleteStaleAllocationsTask;
-
 DROP TASK PurgeWrangler IF EXISTS;
 
 CREATE TASK PurgeWrangler  FROM CLASS chargingdemotasks.PurgeWrangler WITH (10,30000) ON ERROR LOG RUN ON PARTITIONS DISABLE;
-
-
-
-
 
 END_OF_BATCH

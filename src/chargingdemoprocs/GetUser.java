@@ -35,9 +35,9 @@ public class GetUser extends VoltProcedure {
     
      public static final SQLStmt getUsage = new SQLStmt("SELECT * FROM user_usage_table WHERE userid = ? ORDER BY lastdate, productid, sessionid, clusterid;");
 
-    public static final SQLStmt getAllTxn = new SQLStmt("SELECT user_txn_id, txn_time, productid, amount "
+    public static final SQLStmt getAllTxn = new SQLStmt("SELECT * "
         + "FROM user_recent_transactions "
-        + "WHERE userid = ? ORDER BY txn_time, user_txn_id, productid, amount;");
+        + "WHERE userid = ? ORDER BY txn_time, user_txn_id, clusterid, productid, amount;");
     
   
 

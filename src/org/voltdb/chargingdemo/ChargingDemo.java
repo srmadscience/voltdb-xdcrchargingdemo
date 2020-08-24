@@ -143,7 +143,7 @@ public class ChargingDemo {
 							"SELECT * FROM cluster_table where cluster_id = " + CLUSTER_IDS[i] + ";");
 
 					if (!cr.getResults()[0].advanceRow()) {
-						mainClient.callProcedure("cluster_table.insert", CLUSTER_IDS[i],CLUSTER_NAMES[i], WATCHED_BY_CLUSTER_IDS[i] );
+						mainClient.callProcedure("cluster_table.insert", CLUSTER_IDS[i],CLUSTER_NAMES[i], WATCHED_BY_CLUSTER_IDS[i],4 );
 					}
 				}
 				
@@ -307,7 +307,7 @@ public class ChargingDemo {
 						}
 
 						// Every ADD_CREDIT_INTERVAL we add credit instead of using it...
-						if (addCreditInterval == 0 && state[oursession].getBalance() < 20) {
+						if (addCreditInterval == 0 && state[oursession].getBalance() < 1000) {
 
 							final long extraCredit = chooseTopUpAmount(state[oursession].getBalance(), r);
 
@@ -433,10 +433,10 @@ public class ChargingDemo {
 
 	private static long chooseTopUpAmount(long balance, Random r) {
 		if (balance > 0) {
-			return 100 + r.nextInt(300);
+			return 100 + r.nextInt(3000);
 		}
 		
-		return 100 + r.nextInt(300) + (-1 * balance);
+		return 100 + r.nextInt(3000) + (-1 * balance);
 
 	}
 

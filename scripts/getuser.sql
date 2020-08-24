@@ -2,16 +2,8 @@ select * from user_table where userid = 2;
 
 select * from user_usage_table where userid = 2;
 
-delete from user_recent_transactions where userid = 2 and amount = 0 ;
+select sum(uut.allocated_units * p.unit_cost )  allocated    from user_usage_table uut 
+					     , product_table p    where uut.userid = 2    and   p.productid = uut.productid;
 
-select * from user_recent_transactions where userid = 2 and amount  >  0 order by userid ;
+select * from user_recent_transactions where userid = 2 order by userid , txn_time;
 
-select sum(amount) from user_recent_transactions where userid = 2 and amount > 0  ;
-
-
-select * from user_recent_transactions where userid = 2 and amount  <  0 order by userid ;
-
-select sum(amount) from user_recent_transactions where userid = 2 and amount < 0  ;
-
-
-select sum(amount) from user_recent_transactions where userid = 2 ;

@@ -38,8 +38,11 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 	public static final SQLStmt getTxn = new SQLStmt("SELECT txn_time FROM user_recent_transactions "
 			+ "WHERE userid = ? AND user_txn_id = ? AND clusterid = ?;");
     
-  	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
-			+ "(userid, user_txn_id, txn_time, productid, amount, clusterid) " + "VALUES (?,?,NOW,?,?,?);");
+ 	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
+			+ "(userid, user_txn_id, txn_time, productid, amount, clusterid,purpose) " + "VALUES (?,?,NOW,?,?,?,?);");
+
+ 	public static final SQLStmt updTxn = new SQLStmt("UPDATE user_recent_transactions "
+			+ "SET purpose = ? WHERE userid = ? AND user_txn_id = ? AND clusterid = ?;");
 
 	public static final SQLStmt getSpendingHistory = new SQLStmt(
 			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount, count(*) how_many " 
@@ -67,9 +70,9 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 	public static final SQLStmt deleteAllocation = new SQLStmt(
 			"DELETE FROM user_usage_table " + "WHERE userid = ? AND productid = ? AND sessionid = ? AND clusterid = ?");
 
+	public static final SQLStmt deleteStaleAllocations = new SQLStmt(
+			"DELETE FROM user_usage_table WHERE userid = ? AND lastdate <  DATEADD( MINUTE, ?, NOW)");
 
-	public static final SQLStmt reportSpending = new SQLStmt(
-			"INSERT INTO user_financial_events (userid   ,amount, purpose, clusterid)    VALUES (?,?,?,?);");
 
 	// @formatter:on
 
@@ -79,7 +82,8 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 		// long currentBalance = 0;
 		long unitCost = 0;
 		long sessionId = inputSessionId;
-		byte userClusterId = -1;
+		long userClusterId = -1;
+		String decision = "Report prior usage";
 
 		if (sessionId <= 0) {
 			sessionId = this.getUniqueId();
@@ -88,6 +92,9 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 		voltQueueSQL(getUser, userId);
 		voltQueueSQL(getProduct, productId);
 		voltQueueSQL(getTxn, userId, txnId, this.getClusterId());
+		voltQueueSQL(getCluster, this.getClusterId());
+		voltQueueSQL(deleteStaleAllocations,userId, -1  * DeleteStaleAllocations.ALLOCATION_TIMEOUT_SECONDS );
+
 
 		VoltTable[] results = voltExecuteSQL();
 
@@ -96,7 +103,8 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 			throw new VoltAbortException("User " + userId + " does not exist");
 		}
 
-		userClusterId = (byte) results[0].getLong("user_owning_cluster");
+		
+		userClusterId = results[0].getLong("user_owning_cluster");
 		
 		// Sanity Check: Does this product exist?
 		if (!results[1].advanceRow()) {
@@ -105,31 +113,32 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 			unitCost = results[1].getLong("UNIT_COST");
 		}
 
-		// Sanity Check: Is this a re-send of a transaction we've already done?
+	// Sanity Check: Is this a re-send of a transaction we've already done?
 		if (results[2].advanceRow()) {
 			this.setAppStatusCode(ReferenceData.TXN_ALREADY_HAPPENED);
 			this.setAppStatusString(
 					"Event already happened at " + results[2].getTimestampAsTimestamp("txn_time").toString());
 			return voltExecuteSQL(true);
 		}
+		
+		// Find out how long we wait before purging transactions
+		results[3].advanceRow();
+	
+		
+		byte clusterPurgeMinutes = (byte)results[3].getLong("cluster_purge_minutes");
+	
+		if (results[3].wasNull()) {
+			clusterPurgeMinutes = DEFAULT_CLUSTER_PURGE_MINUTES;
+		}
 
 		long amountSpent = unitsUsed * unitCost * -1;
-
-		if (unitsUsed > 0) {
-
-			// Report spending...
-			voltQueueSQL(reportSpending, userId, amountSpent, unitsUsed + " units of product " + productId,
-					this.getClusterId());
-
-			voltExecuteSQL();
-
-		}
+		String oldDecision = "Spent " + amountSpent;
 
 		// Delete allocation record for current product/session
 		voltQueueSQL(deleteAllocation, userId, productId, sessionId, this.getClusterId());
 
 		// Note that transaction is now 'official'
-		voltQueueSQL(addTxn, userId, txnId, productId, amountSpent, this.getClusterId());
+		voltQueueSQL(addTxn, userId, txnId, productId, amountSpent, this.getClusterId(), oldDecision);
 		
 		// Get history so we know current balance
 		voltQueueSQL(getSpendingHistory, userId);
@@ -137,16 +146,14 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 		// get allocated credit so we can see what we can spend...
 		voltQueueSQL(getAllocatedCredit, userId);
 		
-		voltQueueSQL(migrateOldTxns, userId, -2, this.getClusterId());
-		
-		
-
-		final VoltTable[] interimResults = voltExecuteSQL();
-		
-		
+		final VoltTable[] interimResults = voltExecuteSQL();	
+	
+		// if unitsWanted is 0 or less then this transaction is finished...
+		if (unitsWanted <= 0) {
+			return interimResults;
+		}
 
 		// Check the balance...
-
 		final long validatedBalance = results[0].getLong("user_validated_balance");
 	
 	    long recentChanges = 0;
@@ -171,55 +178,56 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 			
 		}
 
-		
 		final long availableCredit = validatedBalance + recentChanges - currentlyAllocatedCredit;
 
-		// if unitsWanted is 0 or less then this transaction is finished...
-		if (unitsWanted <= 0) {
-			return interimResults;
-		}
 
 		long wantToSpend = unitCost * unitsWanted;
 
 		// Calculate how much we can afford ..
-		long whatWeCanAfford = Long.MAX_VALUE;
+		long qtyWeCanAfford = Long.MAX_VALUE;
 
 		if (unitCost > 0) {
-			whatWeCanAfford = availableCredit / unitCost;
+			qtyWeCanAfford = availableCredit / unitCost;
 		}
 
 		long unitsAllocated = 0;
 
-		if (availableCredit <= 0 || whatWeCanAfford == 0) {
+		if (availableCredit < 0 ) {
 
-			this.setAppStatusString("Not enough money");
+			decision = "Negative balance: " + availableCredit;
 			this.setAppStatusCode(ReferenceData.STATUS_NO_MONEY);
 
-		} else if (wantToSpend > availableCredit) {
+		} else if (qtyWeCanAfford == 0) {
 
-			unitsAllocated = whatWeCanAfford;
-			this.setAppStatusString("Allocated " + whatWeCanAfford + " units");
+			decision = "Not enough money for request. Unit cost is " + unitCost;
+			this.setAppStatusCode(ReferenceData.STATUS_NO_MONEY);
+
+		} else  if (wantToSpend > availableCredit) {
+
+			unitsAllocated = qtyWeCanAfford;
+			decision = "Allocated " + qtyWeCanAfford + " units of " + unitsWanted + " requested @" + unitCost;
 			this.setAppStatusCode(ReferenceData.STATUS_SOME_UNITS_ALLOCATED);
-			voltQueueSQL(createAllocation, userId, productId, whatWeCanAfford, sessionId, this.getClusterId());
+			voltQueueSQL(createAllocation, userId, productId, qtyWeCanAfford, sessionId, this.getClusterId());
 
 		} else {
 			unitsAllocated = unitsWanted;
-			this.setAppStatusString("Allocated " + unitsWanted + " units");
+			decision = "Allocated " + unitsWanted + " units @" + unitCost;
 			this.setAppStatusCode(ReferenceData.STATUS_ALL_UNITS_ALLOCATED);
 			voltQueueSQL(createAllocation, userId, productId, unitsWanted, sessionId, this.getClusterId());
 
 		}
 
+		this.setAppStatusString(decision);
+		voltQueueSQL(updTxn, oldDecision + ";bal=" + (validatedBalance + recentChanges)+ "/" + currentlyAllocatedCredit + ";" + decision, userId, txnId, this.getClusterId());
 		voltExecuteSQL();
+
 		
 		int recordsMigrated = 0;
-		
-		
+			
 		if (userClusterId == this.getClusterId()) {
-			recordsMigrated = cleanupTransactions(userId, MIGRATION_GRACE_MINUTES);
+			recordsMigrated = cleanupTransactions(userId, clusterPurgeMinutes);
 		}
 		
-
 		VoltTable t = new VoltTable(new VoltTable.ColumnInfo("userid", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("productId", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("sessionId", VoltType.BIGINT),

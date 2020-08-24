@@ -44,9 +44,6 @@ public class UpsertUser extends VoltProcedure {
 			"UPSERT INTO user_table (userid, user_json_object,user_last_seen,user_owning_cluster,user_validated_balance,user_validated_balance_timestamp) "
 			+ "VALUES (?,?,?,?,?, DATEADD( SECOND, ?, NOW));");
 
-	public static final SQLStmt addCredit = new SQLStmt(
-			"INSERT INTO user_financial_events (userid   ,amount, purpose, clusterid)    VALUES (?,?,?,?);");
-
 	// @formatter:on
 
 	/**
@@ -92,7 +89,6 @@ public class UpsertUser extends VoltProcedure {
 
 				final String status = "Created user " + userId + " with opening credit of " + addBalance;
 				voltQueueSQL(upsertUser, userId, json, lastSeen, this.getClusterId(), 0, -1);
-				voltQueueSQL(addCredit, userId, addBalance, status, this.getClusterId());
 				this.setAppStatusCode(ReferenceData.STATUS_OK);
 				this.setAppStatusString(status);
 
@@ -106,7 +102,6 @@ public class UpsertUser extends VoltProcedure {
 						+ currentBalance;
 
 				voltQueueSQL(upsertUser, userId, json, lastSeen, this.getClusterId(),  -1);
-				voltQueueSQL(addCredit, userId, addBalance, status, this.getClusterId());
 
 				this.setAppStatusCode(ReferenceData.STATUS_OK);
 				this.setAppStatusString(status);
