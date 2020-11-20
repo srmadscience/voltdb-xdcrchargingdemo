@@ -28,7 +28,7 @@ package org.voltdb.chargingdemo;
 import java.util.Arrays;
 import org.voltdb.client.Client;
 
-public class ChargingDemo extends BaseChargingDemo {
+public class CreateChargingDemoData extends BaseChargingDemo {
 
 	/**
 	 * @param args
@@ -37,8 +37,9 @@ public class ChargingDemo extends BaseChargingDemo {
 
 		msg("Parameters:" + Arrays.toString(args));
 
-		if (args.length != 6) {
-			msg("Usage: hostnames recordcount offset tpms durationseconds queryseconds");
+
+		if (args.length != 6 ) {
+			msg("Usage: hostnames recordcount offset tpms  loblength  initialcredit ");
 			System.exit(1);
 		}
 
@@ -56,29 +57,25 @@ public class ChargingDemo extends BaseChargingDemo {
 		// Target transactions per millisecond.
 		int tpMs = Integer.parseInt(args[3]);
 
-		// Runtime for TRANSACTIONS in seconds.
-		int durationSeconds = Integer.parseInt(args[4]);
+		// How long our arbitrary JSON payload will be.
+		int loblength = Integer.parseInt(args[4]);
+		final String ourJson = getArbitraryJsonString(loblength);
 
-		// How often we do global queries...
-		int globalQueryFreqSeconds = Integer.parseInt(args[5]);
+		// Default credit users are 'born' with
+		int initialCredit = Integer.parseInt(args[5]);
 
-		// In some cases we might want to run a check at the
-		// end of the benchmark that all of our transactions did in fact happen.
-		// the 'state' array contains a model of what things *ought* to look like.
-		UserState[] state = new UserState[userCount];
-
+	
 		try {
 			// A VoltDB Client object maintains multiple connections to all the
 			// servers in the cluster.
 			Client mainClient = connectVoltDB(hostlist);
-
-			clearUnfinishedTransactions(mainClient);
-
-			runBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
-					mainClient);
+			
+			confirmMetadataExists(mainClient);		
+			upsertAllUsers(userCount, offset, tpMs, ourJson, initialCredit, mainClient);
 
 			msg("Closing connection...");
 			mainClient.close();
+
 
 		} catch (Exception e) {
 			msg(e.getMessage());
@@ -86,5 +83,11 @@ public class ChargingDemo extends BaseChargingDemo {
 
 	}
 
+
+
+
+
+
+	
 
 }

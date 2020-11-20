@@ -1,7 +1,5 @@
 package org.voltdb.chargingdemo;
 
-
-
 /* This file is part of VoltDB.
  * Copyright (C) 2008-2019 VoltDB Inc.
  *
@@ -27,8 +25,9 @@ package org.voltdb.chargingdemo;
 
 import java.util.Arrays;
 import org.voltdb.client.Client;
+import org.voltdb.client.ClientResponse;
 
-public class ChargingDemo extends BaseChargingDemo {
+public class DeleteChargingDemoData extends BaseChargingDemo {
 
 	/**
 	 * @param args
@@ -37,45 +36,41 @@ public class ChargingDemo extends BaseChargingDemo {
 
 		msg("Parameters:" + Arrays.toString(args));
 
-		if (args.length != 6) {
-			msg("Usage: hostnames recordcount offset tpms durationseconds queryseconds");
+		if (args.length != 2) {
+			msg("Usage: hostnames tpms");
 			System.exit(1);
 		}
 
 		// Comma delimited list of hosts...
 		String hostlist = args[0];
 
-		// How many users
-		int userCount = Integer.parseInt(args[1]);
-
-		// Used to allow multiple copies of client to run at once. Makes demo start
-		// creating ids
-		// from 'offset' instead of zero.
-		int offset = Integer.parseInt(args[2]);
-
 		// Target transactions per millisecond.
-		int tpMs = Integer.parseInt(args[3]);
-
-		// Runtime for TRANSACTIONS in seconds.
-		int durationSeconds = Integer.parseInt(args[4]);
-
-		// How often we do global queries...
-		int globalQueryFreqSeconds = Integer.parseInt(args[5]);
-
-		// In some cases we might want to run a check at the
-		// end of the benchmark that all of our transactions did in fact happen.
-		// the 'state' array contains a model of what things *ought* to look like.
-		UserState[] state = new UserState[userCount];
+		int tpMs = Integer.parseInt(args[1]);
 
 		try {
 			// A VoltDB Client object maintains multiple connections to all the
 			// servers in the cluster.
 			Client mainClient = connectVoltDB(hostlist);
 
-			clearUnfinishedTransactions(mainClient);
+			ClientResponse cr = mainClient.callProcedure("@AdHoc",
+					"SELECT min(userid) min_userid, max(userid) max_userid FROM user_table;");
 
-			runBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
-					mainClient);
+			if (cr.getResults()[0].advanceRow()) {
+
+				int minId = (int) cr.getResults()[0].getLong("min_userid");
+				int maxId = (int) cr.getResults()[0].getLong("max_userid");
+
+				if (cr.getResults()[0].wasNull()) {
+					msg("no users found");
+				} else {
+					deleteAllUsers(minId, maxId, tpMs, mainClient);
+				}
+
+			}
+
+			mainClient.callProcedure("@AdHoc", "DELETE FROM product_table;");
+
+			mainClient.callProcedure("@AdHoc", "DELETE FROM cluster_table;");
 
 			msg("Closing connection...");
 			mainClient.close();
@@ -85,6 +80,5 @@ public class ChargingDemo extends BaseChargingDemo {
 		}
 
 	}
-
 
 }

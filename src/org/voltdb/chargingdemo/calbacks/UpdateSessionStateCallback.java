@@ -1,6 +1,8 @@
-package org.voltdb.chargingdemo;
+package org.voltdb.chargingdemo.calbacks;
 
 import org.voltdb.VoltTable;
+import org.voltdb.chargingdemo.ChargingDemo;
+import org.voltdb.chargingdemo.UserState;
 import org.voltdb.client.ClientResponse;
 import org.voltdb.client.ProcedureCallback;
 

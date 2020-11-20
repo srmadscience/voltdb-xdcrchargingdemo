@@ -32,25 +32,23 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 
 	// @formatter:off
 
-	public static final SQLStmt getUser = new SQLStmt("SELECT userid, user_validated_balance, user_validated_balance_timestamp, user_owning_cluster "
-			+ "FROM user_table WHERE userid = ?;");
+	public static final SQLStmt getUser = new SQLStmt(
+			"SELECT userid, user_validated_balance, user_validated_balance_timestamp, user_owning_cluster "
+					+ "FROM user_table WHERE userid = ?;");
 
 	public static final SQLStmt getTxn = new SQLStmt("SELECT txn_time FROM user_recent_transactions "
 			+ "WHERE userid = ? AND user_txn_id = ? AND clusterid = ?;");
-    
- 	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
+
+	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
 			+ "(userid, user_txn_id, txn_time, productid, amount, clusterid,purpose) " + "VALUES (?,?,NOW,?,?,?,?);");
 
- 	public static final SQLStmt updTxn = new SQLStmt("UPDATE user_recent_transactions "
-			+ "SET purpose = ? WHERE userid = ? AND user_txn_id = ? AND clusterid = ?;");
+	public static final SQLStmt updTxn = new SQLStmt("UPDATE user_recent_transactions " // TODO
+			+ "SET purpose = ? WHERE userid = ? AND user_txn_id = ? AND clusterid = ? AND NOT MIGRATING;");
 
 	public static final SQLStmt getSpendingHistory = new SQLStmt(
-			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount, count(*) how_many " 
-					+ "from user_recent_transactions ut  "
-					+ "   , user_table uc " 
-					+ "where ut.userid = ?  " 
-					+ "and   ut.userid = uc.userid " 
-					+ "and ut.txn_time > uc.user_validated_balance_timestamp "
+			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount, count(*) how_many "
+					+ "from user_recent_transactions ut  " + "   , user_table uc " + "where ut.userid = ?  "
+					+ "and   ut.userid = uc.userid " + "and ut.txn_time > uc.user_validated_balance_timestamp "
 					+ "group by ut.userid, uc.user_validated_balance "
 					+ "order by  ut.userid, uc.user_validated_balance; ");
 
@@ -71,8 +69,7 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 			"DELETE FROM user_usage_table " + "WHERE userid = ? AND productid = ? AND sessionid = ? AND clusterid = ?");
 
 	public static final SQLStmt deleteStaleAllocations = new SQLStmt(
-			"DELETE FROM user_usage_table WHERE userid = ? AND lastdate <  DATEADD( MINUTE, ?, NOW)");
-
+			"DELETE FROM user_usage_table WHERE userid = ? AND lastdate <  DATEADD( MINUTE, ?, NOW)  AND clusterid = ?");
 
 	// @formatter:on
 
@@ -84,6 +81,7 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 		long sessionId = inputSessionId;
 		long userClusterId = -1;
 		String decision = "Report prior usage";
+		byte clusterPurgeMinutes = DEFAULT_CLUSTER_PURGE_MINUTES;
 
 		if (sessionId <= 0) {
 			sessionId = this.getUniqueId();
@@ -93,8 +91,8 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 		voltQueueSQL(getProduct, productId);
 		voltQueueSQL(getTxn, userId, txnId, this.getClusterId());
 		voltQueueSQL(getCluster, this.getClusterId());
-		voltQueueSQL(deleteStaleAllocations,userId, -1  * DeleteStaleAllocations.ALLOCATION_TIMEOUT_SECONDS );
-
+		voltQueueSQL(deleteStaleAllocations, userId, -1 * DeleteStaleAllocations.ALLOCATION_TIMEOUT_SECONDS,
+				this.getClusterId());
 
 		VoltTable[] results = voltExecuteSQL();
 
@@ -103,9 +101,8 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 			throw new VoltAbortException("User " + userId + " does not exist");
 		}
 
-		
 		userClusterId = results[0].getLong("user_owning_cluster");
-		
+
 		// Sanity Check: Does this product exist?
 		if (!results[1].advanceRow()) {
 			throw new VoltAbortException("Product " + productId + " does not exist");
@@ -113,22 +110,17 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 			unitCost = results[1].getLong("UNIT_COST");
 		}
 
-	// Sanity Check: Is this a re-send of a transaction we've already done?
+		// Sanity Check: Is this a re-send of a transaction we've already done?
 		if (results[2].advanceRow()) {
 			this.setAppStatusCode(ReferenceData.TXN_ALREADY_HAPPENED);
 			this.setAppStatusString(
 					"Event already happened at " + results[2].getTimestampAsTimestamp("txn_time").toString());
 			return voltExecuteSQL(true);
 		}
-		
+
 		// Find out how long we wait before purging transactions
-		results[3].advanceRow();
-	
-		
-		byte clusterPurgeMinutes = (byte)results[3].getLong("cluster_purge_minutes");
-	
-		if (results[3].wasNull()) {
-			clusterPurgeMinutes = DEFAULT_CLUSTER_PURGE_MINUTES;
+		if (results[3].advanceRow()) {
+			clusterPurgeMinutes = (byte) results[3].getLong("cluster_purge_minutes");
 		}
 
 		long amountSpent = unitsUsed * unitCost * -1;
@@ -139,15 +131,15 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 
 		// Note that transaction is now 'official'
 		voltQueueSQL(addTxn, userId, txnId, productId, amountSpent, this.getClusterId(), oldDecision);
-		
+
 		// Get history so we know current balance
 		voltQueueSQL(getSpendingHistory, userId);
 
 		// get allocated credit so we can see what we can spend...
 		voltQueueSQL(getAllocatedCredit, userId);
-		
-		final VoltTable[] interimResults = voltExecuteSQL();	
-	
+
+		final VoltTable[] interimResults = voltExecuteSQL();
+
 		// if unitsWanted is 0 or less then this transaction is finished...
 		if (unitsWanted <= 0) {
 			return interimResults;
@@ -155,31 +147,30 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 
 		// Check the balance...
 		final long validatedBalance = results[0].getLong("user_validated_balance");
-	
-	    long recentChanges = 0;
-		
+
+		long recentChanges = 0;
+
 		if (interimResults[2].advanceRow()) {
 			recentChanges = interimResults[2].getLong("ut_amount");
-			
+
 			if (interimResults[2].wasNull()) {
-				recentChanges=0;
+				recentChanges = 0;
 			}
 		}
-		
+
 		long currentlyAllocatedCredit = 0;
 
 		// If we have any reservations take their cost into account
 		if (interimResults[3].advanceRow()) {
 			currentlyAllocatedCredit = interimResults[3].getLong("allocated");
-			
+
 			if (interimResults[3].wasNull()) {
-				currentlyAllocatedCredit=0;
+				currentlyAllocatedCredit = 0;
 			}
-			
+
 		}
 
 		final long availableCredit = validatedBalance + recentChanges - currentlyAllocatedCredit;
-
 
 		long wantToSpend = unitCost * unitsWanted;
 
@@ -192,7 +183,7 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 
 		long unitsAllocated = 0;
 
-		if (availableCredit < 0 ) {
+		if (availableCredit < 0) {
 
 			decision = "Negative balance: " + availableCredit;
 			this.setAppStatusCode(ReferenceData.STATUS_NO_MONEY);
@@ -202,7 +193,7 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 			decision = "Not enough money for request. Unit cost is " + unitCost;
 			this.setAppStatusCode(ReferenceData.STATUS_NO_MONEY);
 
-		} else  if (wantToSpend > availableCredit) {
+		} else if (wantToSpend > availableCredit) {
 
 			unitsAllocated = qtyWeCanAfford;
 			decision = "Allocated " + qtyWeCanAfford + " units of " + unitsWanted + " requested @" + unitCost;
@@ -218,25 +209,29 @@ public class ReportQuotaUsage extends AbstractChargingProcedure {
 		}
 
 		this.setAppStatusString(decision);
-		voltQueueSQL(updTxn, oldDecision + ";bal=" + (validatedBalance + recentChanges)+ "/" + currentlyAllocatedCredit + ";" + decision, userId, txnId, this.getClusterId());
+		voltQueueSQL(updTxn, oldDecision + ";bal=" + (validatedBalance + recentChanges) + "/" + currentlyAllocatedCredit
+				+ ";" + decision, userId, txnId, this.getClusterId());
 		voltExecuteSQL();
 
-		
 		int recordsMigrated = 0;
-			
+		int newclusterId = this.getClusterId();
+
 		if (userClusterId == this.getClusterId()) {
 			recordsMigrated = cleanupTransactions(userId, clusterPurgeMinutes);
+			newclusterId = changeClusterIfAppropriate(userId);
 		}
-		
+
 		VoltTable t = new VoltTable(new VoltTable.ColumnInfo("userid", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("productId", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("sessionId", VoltType.BIGINT),
-				new VoltTable.ColumnInfo("clusterid", VoltType.BIGINT)
-				,new VoltTable.ColumnInfo("availableCredit", VoltType.BIGINT),
+				new VoltTable.ColumnInfo("current_clusterid", VoltType.BIGINT),
+				new VoltTable.ColumnInfo("new_clusterid", VoltType.BIGINT),
+				new VoltTable.ColumnInfo("availableCredit", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("allocated_units", VoltType.BIGINT),
 				new VoltTable.ColumnInfo("recordsMigrated", VoltType.BIGINT));
 
-		t.addRow(userId, productId, sessionId, this.getClusterId(), availableCredit,unitsAllocated,recordsMigrated);
+		t.addRow(userId, productId, sessionId, this.getClusterId(), newclusterId, availableCredit, unitsAllocated,
+				recordsMigrated);
 
 		VoltTable[] resultsAsArray = { t };
 

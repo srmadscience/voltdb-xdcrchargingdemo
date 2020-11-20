@@ -1,7 +1,5 @@
 package org.voltdb.chargingdemo;
 
-
-
 /* This file is part of VoltDB.
  * Copyright (C) 2008-2019 VoltDB Inc.
  *
@@ -28,7 +26,7 @@ package org.voltdb.chargingdemo;
 import java.util.Arrays;
 import org.voltdb.client.Client;
 
-public class ChargingDemo extends BaseChargingDemo {
+public class ChargingDemoUntil extends BaseChargingDemo {
 
 	/**
 	 * @param args
@@ -37,8 +35,8 @@ public class ChargingDemo extends BaseChargingDemo {
 
 		msg("Parameters:" + Arrays.toString(args));
 
-		if (args.length != 6) {
-			msg("Usage: hostnames recordcount offset tpms durationseconds queryseconds");
+		if (args.length != 9) {
+			msg("Usage: hostnames recordcount offset tpms durationseconds queryseconds pausems inctpms endlatency");
 			System.exit(1);
 		}
 
@@ -62,6 +60,15 @@ public class ChargingDemo extends BaseChargingDemo {
 		// How often we do global queries...
 		int globalQueryFreqSeconds = Integer.parseInt(args[5]);
 
+		// How often we do global queries...
+		int pauseMs = Integer.parseInt(args[6]);
+
+		// How often we do global queries...
+		int inctpms = Integer.parseInt(args[7]);
+
+		// How often we do global queries...
+		int endlatency = Integer.parseInt(args[8]);
+
 		// In some cases we might want to run a check at the
 		// end of the benchmark that all of our transactions did in fact happen.
 		// the 'state' array contains a model of what things *ought* to look like.
@@ -72,10 +79,29 @@ public class ChargingDemo extends BaseChargingDemo {
 			// servers in the cluster.
 			Client mainClient = connectVoltDB(hostlist);
 
+			long maxSeenLatency = 0;
+			int tpMsThisPass = tpMs;
+
 			clearUnfinishedTransactions(mainClient);
 
-			runBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
-					mainClient);
+			while (true) {
+
+				maxSeenLatency = runBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
+						mainClient);
+
+				tpMsThisPass = tpMsThisPass + inctpms;
+
+				msg("tps now " + tpMsThisPass + ", latency was " + maxSeenLatency);
+
+				if (maxSeenLatency > endlatency) {
+					msg("stopping with latency of " + maxSeenLatency);
+					break;
+				}
+
+				msg("waiting for " + pauseMs + " ms");
+				Thread.sleep(pauseMs);
+
+			}
 
 			msg("Closing connection...");
 			mainClient.close();
@@ -85,6 +111,5 @@ public class ChargingDemo extends BaseChargingDemo {
 		}
 
 	}
-
 
 }

@@ -1,6 +1,7 @@
-package org.voltdb.chargingdemo;
+package org.voltdb.chargingdemo.calbacks;
 
 import org.voltdb.VoltTable;
+import org.voltdb.chargingdemo.UserState;
 import org.voltdb.client.ClientResponse;
 
 public class AddCreditCallback extends ReportLatencyCallback {
@@ -28,20 +29,23 @@ public class AddCreditCallback extends ReportLatencyCallback {
   public void clientCallback(ClientResponse arg0) throws Exception {
     super.clientCallback(arg0);
 
-    VoltTable balanceTable = arg0.getResults()[arg0.getResults().length - 2];
-    VoltTable reservationTable = arg0.getResults()[arg0.getResults().length - 1];
+    VoltTable balanceTable = arg0.getResults()[2];
+    VoltTable reservationTable = arg0.getResults()[3];
 
     if (balanceTable.advanceRow()) {
       
       int userid = (int) balanceTable.getLong("userid");
       
-      long validatedBalance = balanceTable.getLong("validated_balance");
+      long validatedBalance = balanceTable.getLong("USER_VALIDATED_BALANCE");
       long utAmount = balanceTable.getLong("ut_amount");
       
       long currentlyAllocated = 0;
       
       if (reservationTable.advanceRow()) {
     	  currentlyAllocated = reservationTable.getLong("allocated");
+    	  if (reservationTable.wasNull()) {
+    		  currentlyAllocated = 0;
+    	  }
       }
 
       synchronized (state) {

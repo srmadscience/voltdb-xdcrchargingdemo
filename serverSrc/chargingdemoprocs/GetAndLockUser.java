@@ -34,7 +34,7 @@ public class GetAndLockUser extends VoltProcedure {
 
     public static final SQLStmt getUser = new SQLStmt("SELECT * FROM user_table WHERE userid = ?;");
     
-    public static final SQLStmt getUsage = new SQLStmt("SELECT * FROM user_usage_table WHERE userid = ? ORDER BY productid, clusterid;");
+    public static final SQLStmt getUsage = new SQLStmt("SELECT * FROM user_usage_table WHERE userid = ? ORDER BY productid, clusterid, sessionid;");
 
     public static final SQLStmt getAllTxn = new SQLStmt("SELECT user_txn_id, txn_time "
         + "FROM user_recent_transactions "

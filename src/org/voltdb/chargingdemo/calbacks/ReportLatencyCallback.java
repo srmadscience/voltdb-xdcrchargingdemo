@@ -1,4 +1,6 @@
-package org.voltdb.chargingdemo;
+package org.voltdb.chargingdemo.calbacks;
+
+import org.voltdb.chargingdemo.ChargingDemo;
 
 /* This file is part of VoltDB.
  * Copyright (C) 2008-2019 VoltDB Inc.
