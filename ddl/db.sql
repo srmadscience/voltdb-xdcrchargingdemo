@@ -1,3 +1,5 @@
+
+load classes ../jars/gson-2.7.jar;
 load classes ../jars/voltdb-chargingdemo.jar;
 
 file -inlinebatch END_OF_BATCH
@@ -31,6 +33,8 @@ CREATE table user_table
 create index ut_del on user_table(user_last_seen);
 
 create index ut_clu on user_table(user_owning_cluster);
+
+ create index ut_loyaltycard on user_table (field(user_json_object, 'loyaltySchemeNumber'));
 
 PARTITION TABLE user_table ON COLUMN userid;
 
@@ -113,10 +117,16 @@ select productid, count(*) how_many, sum(allocated_units) allocated_units
 from user_usage_table
 group by productid;
 
+
+
+
 create procedure showTransactions
 PARTITION ON TABLE user_table COLUMN userid
 as 
 select * from user_recent_transactions where userid = ? ORDER BY txn_time, user_txn_id;
+
+
+create procedure FindByLoyaltyCard as select * from user_table where field(user_json_object, 'loyaltySchemeNumber') = CAST(? AS VARCHAR);
 
 DROP  PROCEDURE ShowCurrentAllocations  IF EXISTS;
 

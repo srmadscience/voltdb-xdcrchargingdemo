@@ -26,26 +26,21 @@ package org.voltdb.chargingdemo;
  */
 
 import java.util.Arrays;
-import java.util.Random;
-
 import org.voltdb.client.Client;
 
 import com.google.gson.Gson;
 
-public class CreateChargingDemoData extends BaseChargingDemo {
+public class ChargingDemoKVStore extends BaseChargingDemo {
 
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		
-		Gson gson = new Gson();
-		Random r = new Random();
 
 		msg("Parameters:" + Arrays.toString(args));
 
-		if (args.length != 6 ) {
-			msg("Usage: hostnames recordcount offset tpms  loblength  initialcredit ");
+		if (args.length != 8) {
+			msg("Usage: hostnames recordcount offset tpms durationseconds queryseconds jsonsize updateproportion");
 			System.exit(1);
 		}
 
@@ -63,20 +58,26 @@ public class CreateChargingDemoData extends BaseChargingDemo {
 		// Target transactions per millisecond.
 		int tpMs = Integer.parseInt(args[3]);
 
-		// How long our arbitrary JSON payload will be.
-		int loblength = Integer.parseInt(args[4]);
-		final String ourJson = getExtraUserDataAsJsonString(loblength, gson, r);
+		// Runtime for TRANSACTIONS in seconds.
+		int durationSeconds = Integer.parseInt(args[4]);
 
-		// Default credit users are 'born' with
-		int initialCredit = Integer.parseInt(args[5]);
+		// How often we do global queries...
+		int globalQueryFreqSeconds = Integer.parseInt(args[5]);
+
+		// How often we do global queries...
+		int jsonsize = Integer.parseInt(args[6]);
+		
+		int updateProportion = Integer.parseInt(args[7]);
+
 	
 		try {
 			// A VoltDB Client object maintains multiple connections to all the
 			// servers in the cluster.
 			Client mainClient = connectVoltDB(hostlist);
-			
-			confirmMetadataExists(mainClient);		
-			upsertAllUsers(userCount, offset, tpMs, ourJson, initialCredit, mainClient);
+
+			unlockAllRecords(mainClient);
+			runKVBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, jsonsize,
+					mainClient,updateProportion);
 
 			msg("Closing connection...");
 			mainClient.close();
@@ -87,11 +88,5 @@ public class CreateChargingDemoData extends BaseChargingDemo {
 
 	}
 
-
-
-
-
-
-	
 
 }

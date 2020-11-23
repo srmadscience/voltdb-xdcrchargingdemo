@@ -66,7 +66,7 @@ public class GetAndLockUser extends VoltProcedure {
       throw new VoltAbortException("User " + userId + " does not exist");
     }
 
-    final TimestampType currentTimestamp = userRecord[0].getTimestampAsTimestamp("the_current_timestamp");
+    final TimestampType currentTimestamp = new TimestampType(this.getTransactionTime());
     final TimestampType lockingSessionExpiryTimestamp = userRecord[0].getTimestampAsTimestamp("user_softlock_expiry");
 
     if (lockingSessionExpiryTimestamp != null && lockingSessionExpiryTimestamp.compareTo(currentTimestamp) > 0) {
@@ -76,8 +76,9 @@ public class GetAndLockUser extends VoltProcedure {
       this.setAppStatusString("User " + userId + " has already been locked by session " + lockingSessionId);
 
     } else {
+      final long lockingSessionId = getUniqueId();
       this.setAppStatusCode(ReferenceData.RECORD_HAS_BEEN_SOFTLOCKED);
-      this.setAppStatusString("User " + userId + " newly locked by session " + getUniqueId());
+      this.setAppStatusString("" + lockingSessionId);
       voltQueueSQL(upsertUserLock, getUniqueId(),  ReferenceData.LOCK_TIMEOUT_MS, currentTimestamp, userId);
     }
 

@@ -36,7 +36,7 @@ import chargingdemoprocs.ReferenceData;
  * @author drolfe
  *
  */
-public class UserState {
+public class UserTransactionState {
 
   /**
    * Identifies this as a new user
@@ -68,9 +68,9 @@ public class UserState {
    * is created by ReportQuotaUsage. The session Ids are used so we know to
    * cancel reservations when we report usage.
    */
-  private long[] productSessionIds = new long[ChargingDemo.PRODUCT_NAMES.length];
+  private long[] productSessionIds = new long[ChargingDemoTransactions.PRODUCT_NAMES.length];
 
-  private long[] productAllocations = new long[ChargingDemo.PRODUCT_NAMES.length];
+  private long[] productAllocations = new long[ChargingDemoTransactions.PRODUCT_NAMES.length];
 
   /**
    * When a transaction started, or zero if there isn't one.
@@ -88,7 +88,7 @@ public class UserState {
    * 
    * @param id
    */
-  public UserState(int id, int balance) {
+  public UserTransactionState(int id, int balance) {
     this.id = id;
     this.balance = balance;
     userStatus = STATUS_NEW_USER;

@@ -1,6 +1,6 @@
 package org.voltdb.chargingdemo.calbacks;
 
-import org.voltdb.chargingdemo.ChargingDemo;
+import org.voltdb.chargingdemo.ChargingDemoTransactions;
 
 /* This file is part of VoltDB.
  * Copyright (C) 2008-2018 VoltDB Inc.
@@ -51,14 +51,14 @@ public class ComplainOnDifferenceCallback implements ProcedureCallback {
         
         if (arg0.getStatus() != ClientResponse.SUCCESS) {
             shc.incCounter("call had error");
-            ChargingDemo.msg("call had error:" + arg0.getStatusString());
+            ChargingDemoTransactions.msg("call had error:" + arg0.getStatusString());
         } else {
             if (expectedCount != arg0.getResults()[0].getRowCount()) {
                 shc.incCounter("transaction_missing_when_checked_" + (expectedCount + - arg0.getResults()[0].getRowCount()));
                 shc.incCounter("transaction_missing_when_checked");
                 
                 final String tableAsString = arg0.getResults()[0].toFormattedString();
-                ChargingDemo.msg(message + ", expected=" + expectedCount + ". Got " + arg0.getResults()[0].getRowCount() + System.lineSeparator() + tableAsString);
+                ChargingDemoTransactions.msg(message + ", expected=" + expectedCount + ". Got " + arg0.getResults()[0].getRowCount() + System.lineSeparator() + tableAsString);
                              
             } else {
                 shc.incCounter("transaction_found_when_checked");

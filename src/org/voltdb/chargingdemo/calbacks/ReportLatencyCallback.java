@@ -1,6 +1,6 @@
 package org.voltdb.chargingdemo.calbacks;
 
-import org.voltdb.chargingdemo.ChargingDemo;
+import org.voltdb.chargingdemo.ChargingDemoTransactions;
 
 /* This file is part of VoltDB.
  * Copyright (C) 2008-2019 VoltDB Inc.
@@ -54,7 +54,7 @@ public class ReportLatencyCallback implements ProcedureCallback {
   public void clientCallback(ClientResponse arg0) throws Exception {
 
     if (arg0.getStatus() != ClientResponse.SUCCESS) {
-      ChargingDemo.msg("Error Code " + arg0.getStatusString());
+      ChargingDemoTransactions.msg("Error Code " + arg0.getStatusString());
     }
 
     shc.reportLatency(statname, startMs, statname, 250);

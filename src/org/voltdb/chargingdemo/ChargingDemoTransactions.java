@@ -28,7 +28,7 @@ package org.voltdb.chargingdemo;
 import java.util.Arrays;
 import org.voltdb.client.Client;
 
-public class ChargingDemo extends BaseChargingDemo {
+public class ChargingDemoTransactions extends BaseChargingDemo {
 
 	/**
 	 * @param args
@@ -65,7 +65,7 @@ public class ChargingDemo extends BaseChargingDemo {
 		// In some cases we might want to run a check at the
 		// end of the benchmark that all of our transactions did in fact happen.
 		// the 'state' array contains a model of what things *ought* to look like.
-		UserState[] state = new UserState[userCount];
+		UserTransactionState[] state = new UserTransactionState[userCount];
 
 		try {
 			// A VoltDB Client object maintains multiple connections to all the
@@ -74,7 +74,7 @@ public class ChargingDemo extends BaseChargingDemo {
 
 			clearUnfinishedTransactions(mainClient);
 
-			runBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
+			runTransactionBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
 					mainClient);
 
 			msg("Closing connection...");

@@ -1,8 +1,8 @@
 package org.voltdb.chargingdemo.calbacks;
 
 import org.voltdb.VoltTable;
-import org.voltdb.chargingdemo.ChargingDemo;
-import org.voltdb.chargingdemo.UserState;
+import org.voltdb.chargingdemo.ChargingDemoTransactions;
+import org.voltdb.chargingdemo.UserTransactionState;
 import org.voltdb.client.ClientResponse;
 import org.voltdb.client.ProcedureCallback;
 
@@ -31,10 +31,10 @@ import org.voltdb.client.ProcedureCallback;
 
 public class UpdateSessionStateCallback implements ProcedureCallback {
 
-  UserState[] state = null;
+  UserTransactionState[] state = null;
   int offset = 0;
 
-  public UpdateSessionStateCallback(UserState[] state, int offset) {
+  public UpdateSessionStateCallback(UserTransactionState[] state, int offset) {
     super();
     this.state = state;
     this.offset = offset;
@@ -42,7 +42,7 @@ public class UpdateSessionStateCallback implements ProcedureCallback {
 
   public void clientCallback(ClientResponse arg0) throws Exception {
     if (arg0.getStatus() != ClientResponse.SUCCESS) {
-      ChargingDemo.msg("Error Code " + arg0.getStatusString());
+      ChargingDemoTransactions.msg("Error Code " + arg0.getStatusString());
     } else {
 
       // Find id. It'll be in the  last VoltTable..
@@ -64,7 +64,7 @@ public class UpdateSessionStateCallback implements ProcedureCallback {
 
       } else {
         
-          ChargingDemo.msg("Balance info not found " + balanceTable.toFormattedString());
+          ChargingDemoTransactions.msg("Balance info not found " + balanceTable.toFormattedString());
         
       }
 

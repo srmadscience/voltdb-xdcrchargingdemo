@@ -1,17 +1,17 @@
 package org.voltdb.chargingdemo.calbacks;
 
 import org.voltdb.VoltTable;
-import org.voltdb.chargingdemo.UserState;
+import org.voltdb.chargingdemo.UserTransactionState;
 import org.voltdb.client.ClientResponse;
 
 public class AddCreditCallback extends ReportLatencyCallback {
 
-  UserState[] state = null;
+  UserTransactionState[] state = null;
 
   int userId = 0;
   int offset = 0;
 
-  public AddCreditCallback(String statname, UserState[] state, int userId, int offset) {
+  public AddCreditCallback(String statname, UserTransactionState[] state, int userId, int offset) {
     super(statname);
     this.state = state;
     this.userId = userId;

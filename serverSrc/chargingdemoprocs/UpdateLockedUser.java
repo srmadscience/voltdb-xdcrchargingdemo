@@ -1,5 +1,6 @@
 package chargingdemoprocs;
 
+
 /* This file is part of VoltDB.
  * Copyright (C) 2008-2019 VoltDB Inc.
  *
@@ -28,58 +29,83 @@ import org.voltdb.VoltProcedure;
 import org.voltdb.VoltTable;
 import org.voltdb.types.TimestampType;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+
 public class UpdateLockedUser extends VoltProcedure {
 
-  // @formatter:off
+	// @formatter:off
 
-    public static final SQLStmt getUser = new SQLStmt("SELECT userid ,user_json_object " + 
-        ",user_last_seen,user_softlock_sessionid,user_softlock_expiry, now the_current_timestamp "
-        + "FROM user_table "
-        + "WHERE userid = ?;");
-    
-     public static final SQLStmt removeUserLockAndUpdateJSON = new SQLStmt("UPDATE user_table "
-        + "SET user_softlock_sessionid = NULL "
-        + "   ,user_softlock_expiry = NULL "
-        + "   ,user_json_object = ? "
-        + "WHERE userid = ?;");
+	public static final SQLStmt getUser = new SQLStmt("SELECT userid ,user_json_object "
+			+ ",user_last_seen,user_softlock_sessionid,user_softlock_expiry, now the_current_timestamp "
+			+ "FROM user_table " + "WHERE userid = ?;");
 
-    // @formatter:on
+	public static final SQLStmt removeUserLockAndUpdateJSON = new SQLStmt(
+			"UPDATE user_table " + "SET user_softlock_sessionid = NULL " + "   ,user_softlock_expiry = NULL "
+					+ "   ,user_json_object = ? " + "WHERE userid = ?;");
 
-  /**
-   * Update a previously locked user. 'sessionid' is the unique id that was return by 
-   * GetAndLockUser, and is required for this to work.
-   * 
-   * @param userId
-   * @return
-   * @throws VoltAbortException
-   */
-  public VoltTable[] run(long userId, long sessionId, String jsonPayload) throws VoltAbortException {
+	Gson gson = new Gson();
 
-    voltQueueSQL(getUser, userId);
+	// @formatter:on
 
-    VoltTable[] userRecord = voltExecuteSQL();
+	/**
+	 * Update a previously locked user. 'sessionid' is the unique id that was return
+	 * by GetAndLockUser, and is required for this to work.
+	 * 
+	 * @param userId
+	 * @return
+	 * @throws VoltAbortException
+	 */
+	public VoltTable[] run(long userId, long sessionId, String jsonPayload, String deltaOperationName)
+			throws VoltAbortException {
 
-    // Sanity check: Does this user exist?
-    if (!userRecord[0].advanceRow()) {
-      throw new VoltAbortException("User " + userId + " does not exist");
-    }
+		voltQueueSQL(getUser, userId);
 
-    final long lockingSessionId = userRecord[0].getLong("user_softlock_sessionid");
-    final TimestampType lockingSessionExpiryTimestamp = userRecord[0].getTimestampAsTimestamp("user_softlock_expiry");
+		VoltTable[] userRecord = voltExecuteSQL();
 
-    // If there is no lock or we're the ones who locked it...
-    if (lockingSessionExpiryTimestamp == null || lockingSessionId == sessionId) {
+		// Sanity check: Does this user exist?
+		if (!userRecord[0].advanceRow()) {
+			throw new VoltAbortException("User " + userId + " does not exist");
+		}
 
-      voltQueueSQL(removeUserLockAndUpdateJSON, jsonPayload,  userId);
+		final long lockingSessionId = userRecord[0].getLong("user_softlock_sessionid");
+		final String oldJsonPayload = userRecord[0].getString("user_json_object");
+		final TimestampType lockingSessionExpiryTimestamp = userRecord[0]
+				.getTimestampAsTimestamp("user_softlock_expiry");
 
-    } else {
-      
-      this.setAppStatusCode(ReferenceData.RECORD_HAS_BEEN_SOFTLOCKED);
-      this.setAppStatusString("User " + userId + " currently locked by session " + lockingSessionId + ". Expires at " + lockingSessionExpiryTimestamp.toString());
- 
-    }
+		// If there is no lock or we're the ones who locked it...
+		if (lockingSessionExpiryTimestamp == null || lockingSessionId == sessionId) {
 
-    return voltExecuteSQL(true);
+			String newJsonPayload = jsonPayload;
 
-  }
+			if (deltaOperationName != null && deltaOperationName.equals(ExtraUserData.NEW_LOYALTY_NUMBER)) {
+
+				try {
+					ExtraUserData eud = gson.fromJson(oldJsonPayload, ExtraUserData.class);
+					eud.loyaltySchemeNumber = Long.parseLong(jsonPayload);
+					newJsonPayload = gson.toJson(eud);
+				} catch (JsonSyntaxException e) {
+					throw new VoltAbortException("Json syntax exception while working with User " + userId + ", ' "
+							+ oldJsonPayload + "' and '" + jsonPayload);
+				} catch (NumberFormatException e) {
+					throw new VoltAbortException("Invalid loyalty card number: '" + jsonPayload);
+				}
+
+			}
+
+			voltQueueSQL(removeUserLockAndUpdateJSON, newJsonPayload, userId);
+			this.setAppStatusCode(ReferenceData.STATUS_OK);
+			this.setAppStatusString("User " + userId + " updated");
+
+		} else {
+
+			this.setAppStatusCode(ReferenceData.RECORD_HAS_BEEN_SOFTLOCKED);
+			this.setAppStatusString("User " + userId + " currently locked by session " + lockingSessionId
+					+ ". Expires at " + lockingSessionExpiryTimestamp.toString());
+
+		}
+
+		return voltExecuteSQL(true);
+
+	}
 }

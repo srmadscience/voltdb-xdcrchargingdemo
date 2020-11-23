@@ -72,7 +72,7 @@ public class ChargingDemoUntil extends BaseChargingDemo {
 		// In some cases we might want to run a check at the
 		// end of the benchmark that all of our transactions did in fact happen.
 		// the 'state' array contains a model of what things *ought* to look like.
-		UserState[] state = new UserState[userCount];
+		UserTransactionState[] state = new UserTransactionState[userCount];
 
 		try {
 			// A VoltDB Client object maintains multiple connections to all the
@@ -86,7 +86,7 @@ public class ChargingDemoUntil extends BaseChargingDemo {
 
 			while (true) {
 
-				maxSeenLatency = runBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
+				maxSeenLatency = runTransactionBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, state,
 						mainClient);
 
 				tpMsThisPass = tpMsThisPass + inctpms;
