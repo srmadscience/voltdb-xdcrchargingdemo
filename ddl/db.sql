@@ -34,7 +34,7 @@ create index ut_del on user_table(user_last_seen);
 
 create index ut_clu on user_table(user_owning_cluster);
 
- create index ut_loyaltycard on user_table (field(user_json_object, 'loyaltySchemeNumber'));
+create index ut_loyaltycard on user_table (field(user_json_object, 'loyaltySchemeNumber'));
 
 PARTITION TABLE user_table ON COLUMN userid;
 
@@ -85,7 +85,13 @@ CREATE INDEX uut_del_idx2 ON user_usage_table(userid,lastdate);
 
 PARTITION TABLE user_usage_table ON COLUMN userid;
 
-
+CREATE STREAM user_addcredit_events 
+partition on column userid
+export to target user_addcredit_events
+(userid bigint not null 
+,amount bigint not null
+,user_txn_id varchar(128) not null
+,message varchar(80) not null);
 
 
 create view cluster_activity_by_users as 

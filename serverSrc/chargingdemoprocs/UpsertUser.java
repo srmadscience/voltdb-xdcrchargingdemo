@@ -40,9 +40,12 @@ public class UpsertUser extends VoltProcedure {
 	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
 			+ "(userid, user_txn_id, txn_time, amount,clusterid) VALUES (?,?,NOW,?,?);");
 
-	public static final SQLStmt upsertUser = new SQLStmt(
-			"UPSERT INTO user_table (userid, user_json_object,user_last_seen,user_owning_cluster,user_validated_balance,user_validated_balance_timestamp) "
-			+ "VALUES (?,?,?,?,?, DATEADD( SECOND, ?, NOW));");
+	public static final SQLStmt insertUser = new SQLStmt(
+			"INSERT INTO user_table (userid, user_json_object,user_last_seen,user_owning_cluster,user_validated_balance,user_validated_balance_timestamp) "
+					+ "VALUES (?,?,?,?,?, DATEADD( SECOND, ?, NOW));");
+
+	public static final SQLStmt reportAddcreditEvent = new SQLStmt(
+			"INSERT INTO user_addcredit_events " + "(userid,amount,user_txn_id,message) VALUES (?,?,?,?);");
 
 	// @formatter:on
 
@@ -59,8 +62,8 @@ public class UpsertUser extends VoltProcedure {
 	 * @return
 	 * @throws VoltAbortException
 	 */
-	public VoltTable[] run(long userId, long addBalance, String isNew, String json, String purpose,
-			TimestampType lastSeen, String txnId) throws VoltAbortException {
+	public VoltTable[] run(long userId, long addBalance, String json, String purpose, TimestampType lastSeen,
+			String txnId) throws VoltAbortException {
 
 		long currentBalance = 0;
 
@@ -79,35 +82,27 @@ public class UpsertUser extends VoltProcedure {
 
 			voltQueueSQL(addTxn, userId, txnId, addBalance, this.getClusterId());
 
-			if (isNew.equalsIgnoreCase("Y")) {
-
-				if (results[0].advanceRow()) {
-					throw new VoltAbortException("User " + userId + " exists but shouldn't");
-				}
-
-				currentBalance = addBalance;
+			if (!results[0].advanceRow()) {
 
 				final String status = "Created user " + userId + " with opening credit of " + addBalance;
-				voltQueueSQL(upsertUser, userId, json, lastSeen, this.getClusterId(), 0, -1);
+				voltQueueSQL(insertUser, userId, json, lastSeen, this.getClusterId(), 0, -1);
+				voltQueueSQL(reportAddcreditEvent, userId, addBalance, txnId, "user created");
 				this.setAppStatusCode(ReferenceData.STATUS_OK);
 				this.setAppStatusString(status);
 
 			} else {
 
-				if (!results[0].advanceRow()) {
-					throw new VoltAbortException("User " + userId + " does not exist");
-				}
-
 				final String status = "Updated user " + userId + " - added credit of " + addBalance + "; balance now "
 						+ currentBalance;
 
-				voltQueueSQL(upsertUser, userId, json, lastSeen, this.getClusterId(),  -1);
-
+				voltQueueSQL(reportAddcreditEvent, userId, addBalance, txnId, "user upserted");
 				this.setAppStatusCode(ReferenceData.STATUS_OK);
 				this.setAppStatusString(status);
 
 			}
+
 		}
+		
 		return voltExecuteSQL(true);
 	}
 }

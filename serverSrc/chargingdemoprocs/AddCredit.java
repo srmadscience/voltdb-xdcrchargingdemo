@@ -31,29 +31,29 @@ public class AddCredit extends VoltProcedure {
 
 	// @formatter:off
 
-	public static final SQLStmt getUser = new SQLStmt("SELECT userid, user_validated_balance, user_validated_balance_timestamp "
-			+ "FROM user_table WHERE userid = ?;");
-	
+	public static final SQLStmt getUser = new SQLStmt(
+			"SELECT userid, user_validated_balance, user_validated_balance_timestamp "
+					+ "FROM user_table WHERE userid = ?;");
+
 	public static final SQLStmt getTxn = new SQLStmt("SELECT txn_time FROM user_recent_transactions "
 			+ "WHERE userid = ? " + "AND user_txn_id = ?" + "AND clusterid = ?;");
 
 	public static final SQLStmt addTxn = new SQLStmt("INSERT INTO user_recent_transactions "
 			+ "(userid, user_txn_id, txn_time,amount,clusterid,purpose) VALUES (?,?,NOW,?,?,?);");
 
-
 	public static final SQLStmt getSpendingHistory = new SQLStmt(
-			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount " 
-					+ "from user_recent_transactions ut  "
-					+ "   , user_table uc " 
-					+ "where ut.userid = ?  " 
-					+ "and   ut.userid = uc.userid " 
-					+ "and ut.txn_time > uc.user_validated_balance_timestamp "
+			"select ut.userid, uc.user_validated_balance, sum(ut.amount) ut_amount "
+					+ "from user_recent_transactions ut  " + "   , user_table uc " + "where ut.userid = ?  "
+					+ "and   ut.userid = uc.userid " + "and ut.txn_time > uc.user_validated_balance_timestamp "
 					+ "group by ut.userid, uc.user_validated_balance "
 					+ "order by  ut.userid, uc.user_validated_balance; ");
 
 	public static final SQLStmt getAllocatedCredit = new SQLStmt(
 			"select sum(uut.allocated_units * p.unit_cost )  allocated " + "from user_usage_table uut "
 					+ "   , product_table p " + "where uut.userid = ? " + "and   p.productid = uut.productid;");
+
+	public static final SQLStmt reportAddcreditEvent = new SQLStmt("INSERT INTO user_addcredit_events "
+			+ "(userid,amount,user_txn_id,message) VALUES (?,?,?,?);");
 
 	// @formatter:on
 
@@ -87,6 +87,7 @@ public class AddCredit extends VoltProcedure {
 			this.setAppStatusCode(ReferenceData.TXN_ALREADY_HAPPENED);
 			this.setAppStatusString(
 					"Event already happened at " + userAndTxn[1].getTimestampAsTimestamp("txn_time").toString());
+			voltQueueSQL(reportAddcreditEvent, userId, extraCredit, txnId, "Credit already added");
 
 		} else {
 
@@ -97,8 +98,7 @@ public class AddCredit extends VoltProcedure {
 
 			// Insert a row into the stream for each user's financial events.
 			// The view user_balances can then calculate actual credit
-			voltQueueSQL(addTxn, userId, txnId, extraCredit, this.getClusterId(),"Add Credit");
-
+			voltQueueSQL(addTxn, userId, txnId, extraCredit, this.getClusterId(), "Add Credit");
 
 			// get user and validated balance
 			voltQueueSQL(getUser, userId);
@@ -109,6 +109,7 @@ public class AddCredit extends VoltProcedure {
 			// get allocated credit so we can see what we can spend...
 			voltQueueSQL(getAllocatedCredit, userId);
 
+			voltQueueSQL(reportAddcreditEvent, userId, extraCredit, txnId, "OK");
 		}
 
 		return voltExecuteSQL(true);

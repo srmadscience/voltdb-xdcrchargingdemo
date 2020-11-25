@@ -260,7 +260,7 @@ public class BaseChargingDemo {
 
 			ReportLatencyCallback upsertUserCallback = new ReportLatencyCallback("UpsertUser");
 
-			mainClient.callProcedure(upsertUserCallback, "UpsertUser", i + offset, initialCredit, "Y", ourJson,
+			mainClient.callProcedure(upsertUserCallback, "UpsertUser", i + offset, initialCredit,  ourJson,
 					"Created", new Date(startMsUpsert), "Create_" + i);
 
 			if (i % 100000 == 1) {

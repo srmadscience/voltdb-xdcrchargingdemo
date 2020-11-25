@@ -10,5 +10,6 @@
 	<classpathentry kind="lib" path="/Users/drolfe/Desktop/InstallsOfVolt/voltdb-ent-9.3/voltdb/voltdb-9.3.jar"/>
 	<classpathentry kind="lib" path="/Users/drolfe/Desktop/InstallsOfVolt/voltdb-ent-9.3/voltdb/voltdbclient-9.3.jar"/>
 	<classpathentry kind="lib" path="jars/gson-2.7.jar"/>
+	<classpathentry kind="lib" path="jars/kafka-clients-2.6.0.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
