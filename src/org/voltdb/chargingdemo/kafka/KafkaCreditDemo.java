@@ -90,6 +90,7 @@ public class KafkaCreditDemo {
 
 		}
 		
+		producer.flush();
 		producer.close();
 		
 	}
