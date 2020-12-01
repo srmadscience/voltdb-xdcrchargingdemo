@@ -44,8 +44,7 @@ public class ReferenceData {
     public static final byte RECORD_ALREADY_SOFTLOCKED = 53;
     public static final byte RECORD_HAS_BEEN_SOFTLOCKED = 54;
     public static final byte USER_EXISTS_BUT_SHOULDNT = 55;
-    
-    public static final byte CREDIT_ADDED = 55;
+    public static final byte CREDIT_ADDED = 56;
     
     public static final int  LOCK_TIMEOUT_MS = 50;
 
