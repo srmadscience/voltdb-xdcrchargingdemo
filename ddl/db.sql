@@ -1,5 +1,5 @@
 
-load classes ../jars/gson-2.7.jar;
+load classes ../lib/gson-2.7.jar;
 load classes ../jars/voltdb-chargingdemo.jar;
 
 file -inlinebatch END_OF_BATCH
