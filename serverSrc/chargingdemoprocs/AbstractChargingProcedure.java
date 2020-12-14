@@ -45,7 +45,10 @@ public class AbstractChargingProcedure extends VoltProcedure {
 					+ "group by ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp "
 					+ "order by  ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp; ");
 
-	public static final SQLStmt migrateOldTxns = new SQLStmt("MIGRATE FROM user_recent_transactions "
+//	public static final SQLStmt migrateOldTxns = new SQLStmt("MIGRATE FROM user_recent_transactions "
+//			+ "WHERE userid = ? " + "AND txn_time >= ? " + "AND txn_time < ?  " + "AND NOT MIGRATING();"); // TODO
+
+	public static final SQLStmt migrateOldTxns = new SQLStmt("DELETE FROM user_recent_transactions "
 			+ "WHERE userid = ? " + "AND txn_time >= ? " + "AND txn_time < ?  " + "AND NOT MIGRATING();"); // TODO
 
 	public static final SQLStmt updateUser = new SQLStmt("UPDATE user_table " + "SET user_validated_balance = ?"

@@ -208,7 +208,9 @@ public class BaseChargingDemo {
 		int tpThisMs = 0;
 
 		// So we iterate through all our users...
+		int delcount = 0;
 		for (int i = minId; i <= maxId; i++) {
+			
 
 			if (tpThisMs++ > tpMs) {
 
@@ -224,9 +226,10 @@ public class BaseChargingDemo {
 			// Put a request to delete a user into the queue.
 			ReportLatencyCallback deleteUserCallback = new ReportLatencyCallback("DelUser");
 			mainClient.callProcedure(deleteUserCallback, "DelUser", i);
+			delcount++;
 
 			if (i % 100000 == 1) {
-				msg("Deleted " + i + " users...");
+				msg("Deleted " + delcount + " users...");
 			}
 
 		}
@@ -260,8 +263,8 @@ public class BaseChargingDemo {
 
 			ReportLatencyCallback upsertUserCallback = new ReportLatencyCallback("UpsertUser");
 
-			mainClient.callProcedure(upsertUserCallback, "UpsertUser", i + offset, initialCredit,  ourJson,
-					"Created", new Date(startMsUpsert), "Create_" + i);
+			mainClient.callProcedure(upsertUserCallback, "UpsertUser", i + offset, initialCredit, ourJson, "Created",
+					new Date(startMsUpsert), "Create_" + i);
 
 			if (i % 100000 == 1) {
 				msg("Upserted " + i + " users...");
@@ -275,6 +278,11 @@ public class BaseChargingDemo {
 
 		long entriesPerMs = userCount / (System.currentTimeMillis() - startMsUpsert);
 		msg("Upserted " + entriesPerMs + " users per ms...");
+
+		msg("Stats Histogram:");
+		SafeHistogramCache shc = SafeHistogramCache.getInstance();
+		msg(shc.toString());
+
 	}
 
 	protected static void queryUser(Client mainClient, long queryUserId)
@@ -301,6 +309,7 @@ public class BaseChargingDemo {
 			msg(System.lineSeparator() + allocResponse.getResults()[i].toFormattedString());
 		}
 	}
+
 	protected static void queryLoyaltyCard(Client mainClient, long cardId)
 			throws IOException, NoConnectionsException, ProcCallException {
 
@@ -323,19 +332,20 @@ public class BaseChargingDemo {
 
 		msg("Clearing unfinished transactions from prior runs...");
 
-		//TODO make XDCR friendly
+		// TODO make XDCR friendly
 		mainClient.callProcedure("@AdHoc", "DELETE FROM user_usage_table;");
 		msg("...done");
 
 	}
-	
+
 	protected static void unlockAllRecords(Client mainClient)
 			throws IOException, NoConnectionsException, ProcCallException {
 
 		msg("Clearing locked sessions from prior runs...");
 
-		//TODO make XDCR friendly
-		mainClient.callProcedure("@AdHoc", "UPDATE user_table SET user_softlock_sessionid = null, user_softlock_expiry = null WHERE user_softlock_sessionid IS NOT NULL;");
+		// TODO make XDCR friendly
+		mainClient.callProcedure("@AdHoc",
+				"UPDATE user_table SET user_softlock_sessionid = null, user_softlock_expiry = null WHERE user_softlock_sessionid IS NOT NULL;");
 		msg("...done");
 
 	}
@@ -490,7 +500,7 @@ public class BaseChargingDemo {
 		SafeHistogramCache shc = SafeHistogramCache.getInstance();
 
 		Random r = new Random();
-		
+
 		Gson gson = new Gson();
 
 		// Tell the system everyone has zero credit, even though that's probably
@@ -541,15 +551,17 @@ public class BaseChargingDemo {
 			} else if (userState[oursession].getUserStatus() == UserKVState.STATUS_LOCKED) {
 
 				userState[oursession].setStatus(UserKVState.STATUS_UPDATING);
-				
+
 				if (updateProportion > r.nextInt(101)) {
-					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession, userState[oursession].lockId, getNewLoyaltyCardNumber(r) , ExtraUserData.NEW_LOYALTY_NUMBER);
+					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession,
+							userState[oursession].lockId, getNewLoyaltyCardNumber(r), ExtraUserData.NEW_LOYALTY_NUMBER);
 				} else {
-					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession, userState[oursession].lockId, getExtraUserDataAsJsonString(jsonsize,gson,r), null);
+					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession,
+							userState[oursession].lockId, getExtraUserDataAsJsonString(jsonsize, gson, r), null);
 				}
-				
+
 			}
-			
+
 			tranCount++;
 
 			if (tranCount % 100000 == 1) {
@@ -557,7 +569,6 @@ public class BaseChargingDemo {
 			}
 
 		}
-
 
 		// See if we need to do global queries...
 		if (lastGlobalQueryMs + (globalQueryFreqSeconds * 1000) < System.currentTimeMillis()) {

@@ -22,7 +22,7 @@ DR TABLE product_table;
 
 CREATE table user_table
 (userid bigint not null primary key
-,user_json_object varchar(8000)
+,user_json_object varchar(30000)
 ,user_last_seen TIMESTAMP DEFAULT NOW
 ,user_softlock_sessionid bigint 
 ,user_softlock_expiry TIMESTAMP
