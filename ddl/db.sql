@@ -154,7 +154,9 @@ order by p.productid;
 select 'usersbycluster' statname,  'usersbycluster' stathelp , user_owning_cluster ,how_many statvalue from cluster_users;
 END;
 
-
+CREATE PROCEDURE ShowCurrentAllocations__promBL AS
+select 'usersbycluster' statname,  'usersbycluster' stathelp , user_owning_cluster ,how_many statvalue from cluster_users;
+END;
 
 
 CREATE PROCEDURE 

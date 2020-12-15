@@ -6,6 +6,7 @@ import org.voltdb.client.ClientResponse;
 import org.voltdb.client.ProcedureCallback;
 import org.voltdb.voltutil.stats.SafeHistogramCache;
 
+import chargingdemoprocs.ExtraUserData;
 import chargingdemoprocs.ReferenceData;
 
 /* This file is part of VoltDB.
@@ -120,8 +121,8 @@ public class UserKVState implements ProcedureCallback {
 	 */
 	@Override
 	public String toString() {
-		String desc = "UserState [id=" + id + ", userStatus=" + userState + ", lockId=" + lockId + ", productSessionIds=" + ", txStartMs="
-				+ txStartMs + " ]";
+		String desc = "UserState [id=" + id + ", userStatus=" + userState + ", lockId=" + lockId
+				+ ", productSessionIds=" + ", txStartMs=" + txStartMs + " ]";
 
 		return desc;
 	}
@@ -132,13 +133,12 @@ public class UserKVState implements ProcedureCallback {
 		if (arg0.getStatus() == ClientResponse.SUCCESS) {
 
 			byte statusByte = arg0.getAppStatus();
-			
 
 			if (userState == STATUS_UNLOCKED) {
-				
+
 				// should never get here
-				shc.reportLatency("UserIncorrectResponse", txStartMs,"", 250);
-				
+				shc.reportLatency("UserIncorrectResponse", txStartMs, "", 250);
+
 			} else if (userState == STATUS_TRYING_TO_LOCK) {
 
 				if (statusByte == ReferenceData.RECORD_HAS_BEEN_SOFTLOCKED
@@ -150,22 +150,24 @@ public class UserKVState implements ProcedureCallback {
 
 				} else {
 					userState = STATUS_UNLOCKED;
-					
+
 					shc.reportLatency("GetAndLockUser:Fail", txStartMs, "", 250);
 				}
 			} else if (userState == STATUS_UPDATING) {
-				
-				shc.reportLatency("UpdateLockedUser", txStartMs, "", 250);
+
+				if (arg0.getAppStatusString().indexOf(ExtraUserData.NEW_LOYALTY_NUMBER) > -1) {
+					shc.reportLatency("UpdateLockedUserDelta", txStartMs, "", 250);
+				} else {
+					shc.reportLatency("UpdateLockedUserAll", txStartMs, "", 250);
+				}
 				lockId = "";
 				userState = STATUS_UNLOCKED;
-			} 
-
-			
+			}
 
 		} else {
 			shc.reportLatency(arg0.getStatusString(), txStartMs, "", 250);
 		}
-		
+
 		txStartMs = 0;
 	}
 

@@ -555,6 +555,7 @@ public class BaseChargingDemo {
 				if (updateProportion > r.nextInt(101)) {
 					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession,
 							userState[oursession].lockId, getNewLoyaltyCardNumber(r), ExtraUserData.NEW_LOYALTY_NUMBER);
+	
 				} else {
 					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession,
 							userState[oursession].lockId, getExtraUserDataAsJsonString(jsonsize, gson, r), null);

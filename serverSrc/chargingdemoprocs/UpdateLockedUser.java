@@ -77,6 +77,9 @@ public class UpdateLockedUser extends VoltProcedure {
 		if (lockingSessionExpiryTimestamp == null || lockingSessionId == sessionId) {
 
 			String newJsonPayload = jsonPayload;
+			
+			this.setAppStatusCode(ReferenceData.STATUS_OK);
+			this.setAppStatusString("User " + userId + " updated");
 
 			if (deltaOperationName != null && deltaOperationName.equals(ExtraUserData.NEW_LOYALTY_NUMBER)) {
 
@@ -84,6 +87,7 @@ public class UpdateLockedUser extends VoltProcedure {
 					ExtraUserData eud = gson.fromJson(oldJsonPayload, ExtraUserData.class);
 					eud.loyaltySchemeNumber = Long.parseLong(jsonPayload);
 					newJsonPayload = gson.toJson(eud);
+					this.setAppStatusString("User " + userId + " updated: " + ExtraUserData.NEW_LOYALTY_NUMBER + " = " + eud.loyaltySchemeNumber);
 				} catch (JsonSyntaxException e) {
 					throw new VoltAbortException("Json syntax exception while working with User " + userId + ", ' "
 							+ oldJsonPayload + "' and '" + jsonPayload);
@@ -94,8 +98,7 @@ public class UpdateLockedUser extends VoltProcedure {
 			}
 
 			voltQueueSQL(removeUserLockAndUpdateJSON, newJsonPayload, userId);
-			this.setAppStatusCode(ReferenceData.STATUS_OK);
-			this.setAppStatusString("User " + userId + " updated");
+			
 
 		} else {
 
