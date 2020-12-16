@@ -1,6 +1,4 @@
-package org.voltdb.chargingdemo;
-
-import java.util.Arrays;
+package org.voltdb.chargingdemo.calbacks;
 
 import org.voltdb.client.ClientResponse;
 import org.voltdb.client.ProcedureCallback;
@@ -41,15 +39,15 @@ import chargingdemoprocs.ReferenceData;
  */
 public class UserKVState implements ProcedureCallback {
 
-	static final byte STATUS_UNLOCKED = 0;
+	public static final byte STATUS_UNLOCKED = 0;
 
-	static final byte STATUS_TRYING_TO_LOCK = 1;
+	public static final byte STATUS_TRYING_TO_LOCK = 1;
 
-	static final byte STATUS_LOCKED = 2;
+	public static final byte STATUS_LOCKED = 2;
 
-	static final byte STATUS_UPDATING = 3;
+	public static final byte STATUS_UPDATING = 3;
 
-	String lockId = null;
+	private String lockId = null;
 
 	/**
 	 * Used to report stats
@@ -59,7 +57,7 @@ public class UserKVState implements ProcedureCallback {
 	/**
 	 * ID of user.
 	 */
-	int id = 0;
+	private int id = 0;
 
 	/**
 	 * How many transactions we've for this user. Increments by 1 each time...
@@ -141,17 +139,22 @@ public class UserKVState implements ProcedureCallback {
 
 			} else if (userState == STATUS_TRYING_TO_LOCK) {
 
-				if (statusByte == ReferenceData.RECORD_HAS_BEEN_SOFTLOCKED
-						|| statusByte == ReferenceData.RECORD_ALREADY_SOFTLOCKED) {
+				if (statusByte == ReferenceData.RECORD_HAS_BEEN_SOFTLOCKED) {
 
 					userState = STATUS_LOCKED;
 					lockId = arg0.getAppStatusString();
 					shc.reportLatency("GetAndLockUser:OK", txStartMs, "", 250);
 
+				} else if (statusByte == ReferenceData.RECORD_ALREADY_SOFTLOCKED) {
+
+					userState = STATUS_UNLOCKED;
+					lockId = "";
+					shc.reportLatency("GetAndLockUser:AlreadyLocked", txStartMs, arg0.getAppStatusString(), 250);
+
 				} else {
 					userState = STATUS_UNLOCKED;
 
-					shc.reportLatency("GetAndLockUser:Fail", txStartMs, "", 250);
+					shc.reportLatency("GetAndLockUser:Fail", txStartMs, arg0.getAppStatusString(), 250);
 				}
 			} else if (userState == STATUS_UPDATING) {
 
@@ -183,6 +186,13 @@ public class UserKVState implements ProcedureCallback {
 	 */
 	public void setLockId(String lockId) {
 		this.lockId = lockId;
+	}
+
+	/**
+	 * @return the id
+	 */
+	public int getId() {
+		return id;
 	}
 
 }

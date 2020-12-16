@@ -76,6 +76,7 @@ public class ChargingDemoKVStore extends BaseChargingDemo {
 			Client mainClient = connectVoltDB(hostlist);
 
 			unlockAllRecords(mainClient);
+			
 			runKVBenchmark(userCount, offset, tpMs, durationSeconds, globalQueryFreqSeconds, jsonsize,
 					mainClient,updateProportion);
 

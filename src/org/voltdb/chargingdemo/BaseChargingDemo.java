@@ -33,6 +33,7 @@ import java.util.Random;
 import org.voltdb.chargingdemo.calbacks.AddCreditCallback;
 import org.voltdb.chargingdemo.calbacks.ReportLatencyCallback;
 import org.voltdb.chargingdemo.calbacks.UpdateSessionStateCallback;
+import org.voltdb.chargingdemo.calbacks.UserKVState;
 import org.voltdb.client.Client;
 import org.voltdb.client.ClientConfig;
 import org.voltdb.client.ClientFactory;
@@ -545,20 +546,22 @@ public class BaseChargingDemo {
 
 			} else if (userState[oursession].getUserStatus() == UserKVState.STATUS_UNLOCKED) {
 
+				userState[oursession].startTran();
 				userState[oursession].setStatus(UserKVState.STATUS_TRYING_TO_LOCK);
-				mainClient.callProcedure(userState[oursession], "GetAndLockUser", oursession);
+				mainClient.callProcedure(userState[oursession], "GetAndLockUser", oursession + offset);
 
 			} else if (userState[oursession].getUserStatus() == UserKVState.STATUS_LOCKED) {
 
+				userState[oursession].startTran();
 				userState[oursession].setStatus(UserKVState.STATUS_UPDATING);
 
 				if (updateProportion > r.nextInt(101)) {
-					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession,
-							userState[oursession].lockId, getNewLoyaltyCardNumber(r), ExtraUserData.NEW_LOYALTY_NUMBER);
+					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession + offset,
+							userState[oursession].getLockId(), getNewLoyaltyCardNumber(r), ExtraUserData.NEW_LOYALTY_NUMBER);
 	
 				} else {
-					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession,
-							userState[oursession].lockId, getExtraUserDataAsJsonString(jsonsize, gson, r), null);
+					mainClient.callProcedure(userState[oursession], "UpdateLockedUser", oursession + offset,
+							userState[oursession].getLockId(), getExtraUserDataAsJsonString(jsonsize, gson, r), null);
 				}
 
 			}

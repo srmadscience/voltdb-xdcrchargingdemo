@@ -79,7 +79,7 @@ public class GetAndLockUser extends VoltProcedure {
       final long lockingSessionId = getUniqueId();
       this.setAppStatusCode(ReferenceData.RECORD_HAS_BEEN_SOFTLOCKED);
       this.setAppStatusString("" + lockingSessionId);
-      voltQueueSQL(upsertUserLock, getUniqueId(),  ReferenceData.LOCK_TIMEOUT_MS, currentTimestamp, userId);
+      voltQueueSQL(upsertUserLock, lockingSessionId,  ReferenceData.LOCK_TIMEOUT_MS, currentTimestamp, userId);
     }
 
     voltQueueSQL(getUser, userId);
