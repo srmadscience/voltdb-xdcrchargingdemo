@@ -37,19 +37,29 @@ public class AbstractChargingProcedure extends VoltProcedure {
 
 	// @formatter:off
 
+//	public static final SQLStmt getMigratableSpendingHistory = new SQLStmt(
+//			"select ut.userid, uc.user_validated_balance, uc.user_validated_balance_timestamp, max(ut.txn_time) txn_time, sum(ut.amount) ut_amount, count(*) how_many "
+//					+ "from user_recent_transactions ut  " + "   , user_table uc " + "where ut.userid = ?  "
+//					+ "and   ut.userid = uc.userid " + "and ut.txn_time > uc.user_validated_balance_timestamp "
+//					+ "and ut.txn_time <= DATEADD( MINUTE, ?, NOW) "
+//					+ "group by ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp "
+//					+ "order by  ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp; ");
+
 	public static final SQLStmt getMigratableSpendingHistory = new SQLStmt(
-			"select ut.userid, uc.user_validated_balance, uc.user_validated_balance_timestamp, max(ut.txn_time) txn_time, sum(ut.amount) ut_amount, count(*) how_many "
+			"select ut.userid, uc.user_validated_balance, uc.user_validated_balance_timestamp, ut.txn_time txn_time, ut.amount ut_amount, ut.user_txn_id,ut.clusterid "
 					+ "from user_recent_transactions ut  " + "   , user_table uc " + "where ut.userid = ?  "
 					+ "and   ut.userid = uc.userid " + "and ut.txn_time > uc.user_validated_balance_timestamp "
 					+ "and ut.txn_time <= DATEADD( MINUTE, ?, NOW) "
-					+ "group by ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp "
-					+ "order by  ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp; ");
+					+ "order by  ut.userid, uc.user_validated_balance,uc.user_validated_balance_timestamp, ut.txn_time, ut.user_txn_id,ut.clusterid; ");
 
 //	public static final SQLStmt migrateOldTxns = new SQLStmt("MIGRATE FROM user_recent_transactions "
 //			+ "WHERE userid = ? " + "AND txn_time >= ? " + "AND txn_time < ?  " + "AND NOT MIGRATING();"); // TODO
 
-	public static final SQLStmt migrateOldTxns = new SQLStmt("DELETE FROM user_recent_transactions "
-			+ "WHERE userid = ? " + "AND txn_time >= ? " + "AND txn_time < ?  " + "AND NOT MIGRATING();"); // TODO
+//	public static final SQLStmt migrateOldTxns = new SQLStmt("DELETE FROM user_recent_transactions "
+//			+ "WHERE userid = ? " + "AND txn_time >= ? " + "AND txn_time < ?  " + "AND NOT MIGRATING();"); // TODO
+
+	public static final SQLStmt migrateOldTxn = new SQLStmt("DELETE FROM user_recent_transactions "
+			+ "WHERE userid = ? " + "AND user_txn_id = ? " + "AND clusterid = ?;");
 
 	public static final SQLStmt updateUser = new SQLStmt("UPDATE user_table " + "SET user_validated_balance = ?"
 			+ "  , user_validated_balance_timestamp = ? " + "WHERE userid = ? ;");
@@ -74,7 +84,7 @@ public class AbstractChargingProcedure extends VoltProcedure {
 	 * all the recent transactions. We do it this way to avoid directly updating a
 	 * balance in an XDCR environment. Evey now and then we fold the older
 	 * transactions for a user into their balance. We only do this to transactions
-	 * that are older than 'minutesGracePeriod'. 
+	 * that are older than 'minutesGracePeriod'.
 	 * 
 	 * Note that the only cluster that can do this is the own that 'owns' the user.
 	 * 
@@ -85,39 +95,70 @@ public class AbstractChargingProcedure extends VoltProcedure {
 	protected int cleanupTransactions(long userId, int minutesGracePeriod) {
 
 		voltQueueSQL(getMigratableSpendingHistory, userId, -1 * minutesGracePeriod);
-		VoltTable[] migrationCandidates = voltExecuteSQL();
+		VoltTable[] queryResults = voltExecuteSQL();
+		VoltTable migrationCandidates = queryResults[queryResults.length - 1];
 
-		if (migrationCandidates[migrationCandidates.length - 1].getRowCount() == 0) {
+		if (migrationCandidates.getRowCount() == 0) {
 			// no data for this user...
 			return 0;
 		}
 
-		migrationCandidates[migrationCandidates.length - 1].resetRowPosition();
-		migrationCandidates[migrationCandidates.length - 1].advanceRow();
 
-		long validatedBalance = migrationCandidates[migrationCandidates.length - 1].getLong("user_validated_balance");
-		long delta = migrationCandidates[migrationCandidates.length - 1].getLong("ut_amount");
-		long howMany = migrationCandidates[migrationCandidates.length - 1].getLong("how_many");
-		TimestampType validatedBalanceTime = migrationCandidates[migrationCandidates.length - 1]
-				.getTimestampAsTimestamp("user_validated_balance_timestamp");
-		TimestampType lastTxnTime = migrationCandidates[migrationCandidates.length - 1]
-				.getTimestampAsTimestamp("txn_time");
+//		long validatedBalance = migratetionCandidates.getLong("user_validated_balance");
+//		long delta = migratetionCandidates.getLong("ut_amount");
+//		long howMany = migratetionCandidates.getLong("how_many");
+//		TimestampType validatedBalanceTime = migratetionCandidates
+//				.getTimestampAsTimestamp("user_validated_balance_timestamp");
+//		TimestampType lastTxnTime = migratetionCandidates
+//				.getTimestampAsTimestamp("txn_time");
+//
+//		if (howMany < 5) {
+//			return 0;
+//		}
+//
+//		voltQueueSQL(updateUser, (delta + validatedBalance), lastTxnTime, userId);
+//		voltQueueSQL(migrateOldTxns, userId, validatedBalanceTime, lastTxnTime);
+//		
+
+		final long howMany = migrationCandidates.getRowCount();
 
 		if (howMany < 5) {
 			return 0;
 		}
 
+		migrationCandidates.advanceRow();
+		long validatedBalance = migrationCandidates.getLong("user_validated_balance");
+//		TimestampType validatedBalanceTime = migratetionCandidates
+//				.getTimestampAsTimestamp("user_validated_balance_timestamp");
+
+		long delta = 0;
+		TimestampType lastTxnTime = null;
+		migrationCandidates.resetRowPosition();
+
+		while (migrationCandidates.advanceRow()) {
+			delta = delta + migrationCandidates.getLong("ut_amount");
+			lastTxnTime = migrationCandidates.getTimestampAsTimestamp("txn_time");
+			String txnId = migrationCandidates.getString("user_txn_id");
+			long clusterId = migrationCandidates.getLong("clusterid");
+
+			voltQueueSQL(migrateOldTxn, userId, txnId, clusterId);
+
+		}
+
 		voltQueueSQL(updateUser, (delta + validatedBalance), lastTxnTime, userId);
-		voltQueueSQL(migrateOldTxns, userId, validatedBalanceTime, lastTxnTime);
+		// voltQueueSQL(migrateOldTxns, userId, validatedBalanceTime, lastTxnTime);
+
 		voltExecuteSQL();
 
 		return (int) howMany;
 	}
 
 	/**
-	 * In an XDCR deployment users can be updated by any cluster but are always 'owned' by a
-	 * cluster for the purposes of cleaning up their transactions. This rountine hands ownership
-	 * to another cluster if it's where all the transactions are happening.
+	 * In an XDCR deployment users can be updated by any cluster but are always
+	 * 'owned' by a cluster for the purposes of cleaning up their transactions. This
+	 * rountine hands ownership to another cluster if it's where all the
+	 * transactions are happening.
+	 * 
 	 * @param userId
 	 * @return
 	 */
