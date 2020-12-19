@@ -67,6 +67,9 @@ public class BaseChargingDemo {
 	public static final int[] WATCHED_BY_CLUSTER_IDS = { 0, 5, 6, 4 }; // TODO
 
 	protected static final long GENERIC_QUERY_USER_ID = 42;
+	
+	static boolean useNuRand = true;
+	
 
 	protected static long chooseTopUpAmount(long balance, Random r) {
 		if (balance > 0) {
@@ -401,7 +404,7 @@ public class BaseChargingDemo {
 			}
 
 			// Find session to do a transaction for...
-			int oursession = r.nextInt(userCount);
+			int oursession = getRandomSessionId(useNuRand, r,userCount);
 
 			// See if session already has an active transaction and avoid
 			// it if it does.
@@ -535,7 +538,7 @@ public class BaseChargingDemo {
 			}
 
 			// Find session to do a transaction for...
-			int oursession = r.nextInt(userCount);
+			int oursession = getRandomSessionId(useNuRand, r,userCount);
 
 			// See if session already has an active transaction and avoid
 			// it if it does.
@@ -632,5 +635,52 @@ public class BaseChargingDemo {
 
 		return oneLineSummary;
 	}
+	
+	
+	public static int getRandomSessionId(boolean useNuRand, Random r, int size) {
+		
+		if (useNuRand) {
+			return NURand(r,size,0,size);
+		}
+		
+		return getRandom(r,0,size);
+	}
+	
+	  /**
+	   * 
+	   *  This is directly lifted from the TATP source code and provides a pseudo-random
+	   *  distribution consistent with observed real world practice.
+	 * @param size
+	 * @param x
+	 * @param y
+	 * @return
+	 */
+	public static int NURand(Random r, int size, int x, int y) {
+
+	        int rvalue = 0;
+	        int a = 65535;
+
+	        if (size > 1000000) {
+	            a = 1048575;
+
+	            if (size > 10000000) {
+	                a = 2097151;
+	            }
+	        }
+
+	        rvalue = ((getRandom(r,0, a) | getRandom(r,x, y)));
+	        rvalue = rvalue % ((y - x) + 1);
+	        rvalue += x;
+
+	        return rvalue;
+	    }
+	  
+	   public static  int getRandom(Random r, int s, int e) {
+
+	        return r.nextInt((e - s)) + s;
+	    }
+
+	  
+	  
 
 }
